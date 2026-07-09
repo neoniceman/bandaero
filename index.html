@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>반대로 하기</title>
+<style>
+  :root{
+    --bg:#ffd93b;
+    --ink:#20232d;
+    --card:#ffffff;
+    --red:#ff4d5e;
+    --blue:#3d7bff;
+    --green:#2ecc8f;
+    --gold:#ff9f1a;
+    /* 팔레트 명도 변형 */
+    --green-d:#1e9e6d;   /* green 어두운 변형 (개구리 윤곽 보조) */
+    --pink:#ff9fae;      /* red 밝은 변형 (볼터치) */
+    --gold-l:#ffb340;    /* gold 밝은 변형 */
+    --gold-d:#c67300;    /* gold 어두운 변형 */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;background:var(--bg);}
+  /* 콤보 구간별 무대 색 (노랑→주황→핑크→보라) */
+  body{--stage-bg:var(--bg);}
+  body[data-stage="1"]{--stage-bg:#ffb43b;}
+  body[data-stage="2"]{--stage-bg:#ff9aa8;}
+  body[data-stage="3"]{--stage-bg:#b39bff;}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;
+    color:var(--ink);
+    user-select:none;-webkit-user-select:none;
+    touch-action:none;
+  }
+  #stage{position:fixed;inset:0;overflow:hidden;background:var(--stage-bg);transition:background 1s;}
+  /* 배경 사선 스트라이프 */
+  #stage::before{
+    content:'';position:absolute;inset:-50%;
+    background:repeating-linear-gradient(45deg,
+      rgba(255,255,255,0.18) 0 26px, transparent 26px 52px);
+    animation:slide 14s linear infinite;
+  }
+  @keyframes slide{to{transform:translate(74px,74px);}}
+  /* 무대 단상(바닥 라인) */
+  #floor{
+    position:fixed;left:0;right:0;top:calc(66% + 104px);bottom:0;z-index:1;
+    background:rgba(32,35,45,.08);border-top:4px solid var(--ink);
+    pointer-events:none;
+  }
+  /* 착지 먼지 파티클 */
+  #dust{position:fixed;left:50%;top:calc(66% + 94px);z-index:2;pointer-events:none;}
+  #dust i{position:absolute;width:11px;height:11px;border-radius:50%;background:rgba(32,35,45,.28);opacity:0;}
+  #dust.puff i:nth-child(1){animation:puffL .38s ease-out;}
+  #dust.puff i:nth-child(2){animation:puffR .38s ease-out;}
+  #dust.puff i:nth-child(3){animation:puffU .34s ease-out;}
+  @keyframes puffL{0%{opacity:.85;transform:translate(-6px,0) scale(.5);}100%{opacity:0;transform:translate(-38px,-10px) scale(1.4);}}
+  @keyframes puffR{0%{opacity:.85;transform:translate(6px,0) scale(.5);}100%{opacity:0;transform:translate(34px,-12px) scale(1.5);}}
+  @keyframes puffU{0%{opacity:.7;transform:translate(0,0) scale(.5);}100%{opacity:0;transform:translate(2px,-22px) scale(1.2);}}
+
+  .hud{
+    position:fixed;top:0;left:0;right:0;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:16px 20px;pointer-events:none;z-index:5;
+    font-variant-numeric:tabular-nums;
+  }
+  .hud .block{display:flex;flex-direction:column;gap:1px;}
+  .hud .label{font-size:11px;letter-spacing:.2em;font-weight:700;opacity:.55;}
+  .hud .value{font-size:28px;font-weight:900;}
+  .hud .right{text-align:right;}
+  #lives{font-size:20px;letter-spacing:2px;}
+  #timerbar{
+    position:fixed;bottom:0;left:0;height:6px;width:100%;
+    background:var(--ink);transform-origin:left;z-index:5;
+  }
+
+  /* 지시 카드 */
+  #cardWrap{
+    position:fixed;left:0;right:0;top:30%;transform:translateY(-50%);
+    display:flex;justify-content:center;
+    z-index:4;perspective:600px;pointer-events:none;
+  }
+  #card{
+    position:relative;
+    min-width:250px;padding:24px 34px;border-radius:22px;
+    background:var(--card);
+    border:4px solid var(--ink);
+    box-shadow:8px 10px 0 rgba(32,35,45,.28);
+    text-align:center;
+    transform:rotate(var(--tilt,0deg));
+    transition:transform .08s;
+  }
+  #card.obey{
+    background:linear-gradient(135deg,var(--gold-l) 0%,var(--gold) 48%,#e07f00 100%);
+    color:#fff;
+    box-shadow:8px 10px 0 rgba(166,96,0,.55);
+  }
+  #card .rule{
+    font-size:12px;font-weight:800;letter-spacing:.24em;
+    margin-bottom:6px;opacity:.6;
+  }
+  #card.obey .rule{opacity:.95;}
+  .wordrow{display:flex;align-items:center;justify-content:center;gap:14px;}
+  #card .word{font-size:44px;font-weight:900;letter-spacing:.02em;white-space:nowrap;}
+  /* 방향 화살표 스티커 (지시어의 '문자 그대로' 방향) */
+  #cmdArrow{
+    width:34px;height:34px;flex:0 0 34px;
+    background:var(--blue);
+    clip-path:polygon(50% 0,100% 52%,70% 52%,70% 100%,30% 100%,30% 52%,0 52%);
+    filter:drop-shadow(3px 3px 0 rgba(32,35,45,.3));
+  }
+  #cmdArrow.down{transform:rotate(180deg);}
+  #cmdArrow.left{transform:rotate(-90deg);}
+  #cmdArrow.right{transform:rotate(90deg);}
+  #card.obey #cmdArrow{background:#fff;}
+  /* 황금 카드 반짝이 스윕 */
+  #card .shine{
+    position:absolute;inset:0;border-radius:17px;overflow:hidden;
+    pointer-events:none;
+  }
+  #card .shine::after{
+    content:'';position:absolute;top:-30%;bottom:-30%;left:-45%;width:38%;
+    background:linear-gradient(105deg,transparent,rgba(255,255,255,.8),transparent);
+    transform:skewX(-18deg);
+  }
+  #card.obey.in .shine::after{animation:sweep .6s ease-out .12s forwards;}
+  @keyframes sweep{to{left:135%;}}
+  /* 황금 카드 "!!" 효과음 텍스트 */
+  #goldPop{
+    position:absolute;right:-30px;top:-34px;z-index:5;
+    font-size:44px;font-weight:900;color:var(--gold);
+    -webkit-text-stroke:2px var(--ink);
+    text-shadow:3px 3px 0 rgba(32,35,45,.35);
+    opacity:0;pointer-events:none;transform:rotate(14deg);
+  }
+  #goldPop.show{animation:goldpop .55s ease-out forwards;}
+  @keyframes goldpop{
+    0%{opacity:0;transform:scale(.3) rotate(14deg);}
+    25%{opacity:1;transform:scale(1.4) rotate(14deg);}
+    55%{opacity:1;transform:scale(1) rotate(14deg);}
+    100%{opacity:0;transform:scale(1) rotate(14deg);}
+  }
+  /* 도장 찍히는 등장 바운스 */
+  @keyframes cardIn{
+    0%{transform:scale(.4) rotate(calc(var(--tilt,0deg) - 8deg));opacity:0;}
+    50%{transform:scale(1.14) rotate(var(--tilt,0deg));opacity:1;}
+    72%{transform:scale(.95) rotate(var(--tilt,0deg));}
+    100%{transform:scale(1) rotate(var(--tilt,0deg));}
+  }
+  #card.in{animation:cardIn .24s ease-out;}
+  /* 커맨드 제한시간 링 */
+  #cmdTimer{
+    position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);
+    width:70%;height:6px;border-radius:3px;background:rgba(32,35,45,.15);
+    overflow:hidden;
+  }
+  #cmdTimer i{
+    display:block;height:100%;background:var(--red);
+    transform-origin:left;
+  }
+
+  /* 캐릭터 — 청개구리 (골격: body/eye/shadow + up/down/left/right/dead 상태 클래스) */
+  #chara{
+    position:fixed;left:50%;top:66%;
+    width:110px;height:110px;margin-left:-55px;
+    z-index:3;
+    transition:transform .14s cubic-bezier(.34,1.56,.64,1);
+  }
+  #chara .body{
+    position:absolute;left:4px;right:4px;top:16px;bottom:0;
+    border-radius:48% 48% 44% 44%;
+    background:var(--green);border:4px solid var(--ink);
+    transform-origin:50% 100%;
+    transition:transform .14s cubic-bezier(.34,1.56,.64,1),background .14s;
+    animation:breathe 1.2s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{transform:scaleY(1);}50%{transform:scaleY(.96);}}
+  #chara .belly{
+    position:absolute;left:16px;right:16px;bottom:1px;height:42px;
+    background:#fff;border-radius:50% 50% 42% 42%;opacity:.92;
+  }
+  #chara .mouth{
+    position:absolute;left:50%;bottom:24px;width:26px;height:11px;margin-left:-13px;
+    border-bottom:3.5px solid var(--ink);border-radius:0 0 50% 50%;
+    transition:all .14s;
+  }
+  #chara .tongue{
+    position:absolute;left:50%;bottom:12px;width:14px;height:0;margin-left:-7px;
+    background:var(--red);border-radius:0 0 8px 8px;transition:height .14s;
+  }
+  #chara .cheek{
+    position:absolute;bottom:34px;width:15px;height:9px;border-radius:50%;
+    background:var(--pink);opacity:.9;transition:opacity .2s;
+  }
+  #chara .cheek.l{left:8px;} #chara .cheek.r{right:8px;}
+  #chara .leg{
+    position:absolute;bottom:-7px;width:22px;height:14px;
+    border-radius:50% 50% 45% 45%;
+    background:var(--green);border:4px solid var(--ink);
+    transition:transform .14s;
+  }
+  #chara .leg.l{left:4px;} #chara .leg.r{right:4px;}
+  /* 눈: 머리 위로 볼록 솟은 왕눈 + 움직이는 동공 */
+  #chara .eye{
+    position:absolute;top:0;width:32px;height:32px;border-radius:50%;
+    background:#fff;border:4px solid var(--ink);z-index:2;
+    transition:all .14s;
+  }
+  #chara .eye.l{left:13px;} #chara .eye.r{right:13px;}
+  #chara .eye i{
+    position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;
+    border-radius:50%;background:var(--ink);
+    transform:translate(var(--lx,0px),var(--ly,0px));
+    transition:transform .18s,width .2s,height .2s,margin .2s,background .2s;
+  }
+  #chara .shadow{
+    position:absolute;left:8px;right:8px;bottom:-14px;height:14px;
+    border-radius:50%;background:rgba(32,35,45,.2);
+    transition:transform .14s;
+  }
+  /* 액션 중엔 숨쉬기 정지 */
+  #chara.up .body,#chara.down .body,#chara.left .body,#chara.right .body,#chara.dead .body{animation:none;}
+  /* up: 쫙 늘어나는 점프 */
+  #chara.up{transform:translateY(-70px);}
+  #chara.up .body{transform:scaleY(1.16);}
+  #chara.up .eye{top:-8px;}
+  #chara.up .leg{transform:translateY(5px) scaleY(1.3);}
+  #chara.up .shadow{transform:translateY(70px) scaleX(.55);}
+  /* down: 납작 엎드림 + 눈 감김 */
+  #chara.down .body{transform:scaleY(.42);}
+  #chara.down .eye{top:62px;height:9px;border-radius:8px;}
+  #chara.down .eye i{opacity:0;}
+  #chara.down .leg{transform:translateX(0) scaleY(.8);}
+  /* left/right: 기울며 한 발 드는 포즈 */
+  #chara.left{transform:translateX(-90px) rotate(-14deg);}
+  #chara.left .leg.r{transform:translateY(-16px) rotate(-24deg);}
+  #chara.right{transform:translateX(90px) rotate(14deg);}
+  #chara.right .leg.l{transform:translateY(-16px) rotate(24deg);}
+  /* dead: X자 눈 + 혀 내밀기 */
+  #chara.dead .body{background:var(--red);}
+  #chara.dead .eye i{opacity:0;}
+  #chara.dead .eye::before,#chara.dead .eye::after{
+    content:'';position:absolute;left:50%;top:50%;width:17px;height:4px;
+    margin:-2px 0 0 -8.5px;background:var(--ink);border-radius:2px;
+  }
+  #chara.dead .eye::before{transform:rotate(45deg);}
+  #chara.dead .eye::after{transform:rotate(-45deg);}
+  #chara.dead .tongue{height:20px;}
+  #chara.dead .mouth{width:14px;height:6px;margin-left:-7px;}
+  /* 표정 단계: 콤보 5 신남 / 10 몰입 / 15 불타는 눈 */
+  #chara.mood1 .mouth{width:34px;height:17px;margin-left:-17px;}
+  #chara.mood2 .mouth{width:34px;height:17px;margin-left:-17px;}
+  #chara.mood2 .eye i{width:15px;height:15px;margin:-7.5px 0 0 -7.5px;}
+  #chara.mood3 .mouth{width:34px;height:17px;margin-left:-17px;}
+  #chara.mood3 .eye i{
+    width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
+    background:var(--gold);box-shadow:0 0 9px var(--gold-l);
+  }
+
+  /* ---- M2: 임팩트 연출 ---- */
+  /* 화면 킥 (정답 방향으로 4px) */
+  body.kick-up{animation:kickU .12s;}
+  body.kick-down{animation:kickD .12s;}
+  body.kick-left{animation:kickL .12s;}
+  body.kick-right{animation:kickR .12s;}
+  @keyframes kickU{0%{transform:translateY(-4px);}100%{transform:translateY(0);}}
+  @keyframes kickD{0%{transform:translateY(4px);}100%{transform:translateY(0);}}
+  @keyframes kickL{0%{transform:translateX(-4px);}100%{transform:translateX(0);}}
+  @keyframes kickR{0%{transform:translateX(4px);}100%{transform:translateX(0);}}
+  /* 오답 흔들림 + 무채색화 */
+  body.shake{animation:shakeB .3s;}
+  @keyframes shakeB{
+    0%,100%{transform:translate(0,0);}
+    20%{transform:translate(6px,-4px);}40%{transform:translate(-6px,4px);}
+    60%{transform:translate(5px,3px);}80%{transform:translate(-4px,-2px);}
+  }
+  body.mono #stage,body.mono #cardWrap,body.mono #chara,body.mono .hud{filter:grayscale(1);}
+  /* 정답 효과음 자막 */
+  #sfxText{
+    position:fixed;left:50%;top:19%;z-index:7;pointer-events:none;
+    font-size:36px;font-weight:900;color:#fff;
+    -webkit-text-stroke:2px var(--ink);
+    text-shadow:3px 3px 0 rgba(32,35,45,.3);
+    opacity:0;white-space:nowrap;
+  }
+  #sfxText.show{animation:sfxpop .55s ease-out forwards;}
+  @keyframes sfxpop{
+    0%{opacity:0;transform:translateX(-50%) scale(.4) rotate(-7deg);}
+    25%{opacity:1;transform:translateX(-50%) scale(1.25) rotate(-5deg);}
+    50%{transform:translateX(-50%) scale(1) rotate(-5deg);}
+    80%{opacity:1;}
+    100%{opacity:0;transform:translateX(-50%) scale(1) rotate(-5deg);}
+  }
+  /* 콤보 10+ 무지개 스윕 */
+  #rainbow{
+    position:fixed;top:0;bottom:0;left:0;width:55%;z-index:8;
+    pointer-events:none;opacity:0;transform:skewX(-8deg);
+    background:linear-gradient(90deg,transparent,
+      rgba(255,77,94,.45),rgba(255,159,26,.45),rgba(255,217,59,.45),
+      rgba(46,204,143,.45),rgba(61,123,255,.45),transparent);
+  }
+  #rainbow.go{animation:rswp .3s linear;}
+  @keyframes rswp{0%{opacity:1;transform:skewX(-8deg) translateX(-110%);}100%{opacity:1;transform:skewX(-8deg) translateX(300%);}}
+  /* 번개 반응 플래시 */
+  #flash{position:fixed;inset:0;background:var(--bg);z-index:8;opacity:0;pointer-events:none;}
+  #flash.go{animation:fl .12s;}
+  @keyframes fl{0%{opacity:.85;}100%{opacity:0;}}
+  /* 오답 리빌: 카드 확대 + 정답 화살표 빨강 */
+  #card.reveal{transform:scale(1.22) rotate(var(--tilt,0deg));transition:transform .2s;}
+  #card.reveal #cmdArrow{background:var(--red);}
+  #revealTag{
+    position:absolute;left:-16px;top:-18px;z-index:6;
+    background:var(--red);color:#fff;
+    padding:5px 12px;border-radius:10px;border:3px solid var(--ink);
+    font-size:15px;font-weight:900;letter-spacing:.04em;
+    box-shadow:3px 3px 0 rgba(32,35,45,.3);
+    transform:rotate(-8deg);display:none;
+  }
+  #card.reveal #revealTag{display:block;}
+  /* dead 자막 (캐릭터 위) */
+  #deadTag{
+    position:fixed;left:50%;top:56%;z-index:7;pointer-events:none;
+    background:var(--ink);color:#fff;
+    padding:7px 16px;border-radius:12px;
+    font-size:20px;font-weight:900;letter-spacing:.04em;
+    box-shadow:4px 4px 0 rgba(32,35,45,.25);
+    opacity:0;white-space:nowrap;
+  }
+  #deadTag.show{animation:dtag .8s ease-out forwards;}
+  @keyframes dtag{
+    0%{opacity:0;transform:translateX(-50%) scale(.5) rotate(3deg);}
+    20%{opacity:1;transform:translateX(-50%) scale(1.1) rotate(3deg);}
+    40%{transform:translateX(-50%) scale(1) rotate(3deg);}
+    85%{opacity:1;}
+    100%{opacity:0;}
+  }
+  /* 하트 깨지는 낙하 */
+  #heartDrop{
+    position:fixed;top:24px;right:26px;z-index:7;font-size:22px;
+    opacity:0;pointer-events:none;
+  }
+  #heartDrop.drop{animation:hdrop .7s ease-in forwards;}
+  @keyframes hdrop{
+    0%{opacity:1;transform:translate(0,0) rotate(0);}
+    100%{opacity:0;transform:translate(-40px,200px) rotate(-300deg);}
+  }
+  /* 목숨 1개 긴장 연출 */
+  #lives.danger{animation:blinkL 1s step-start infinite;}
+  @keyframes blinkL{50%{opacity:.25;}}
+
+  /* 판정 */
+  #judge{
+    position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);
+    font-size:60px;font-weight:900;z-index:6;
+    pointer-events:none;opacity:0;
+    text-shadow:0 4px 0 rgba(32,35,45,.15);
+  }
+  @keyframes jpop{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(-8deg);}
+    25%{opacity:1;transform:translate(-50%,-50%) scale(1.2) rotate(3deg);}
+    45%{transform:translate(-50%,-50%) scale(1);}
+    80%{opacity:1;}
+    100%{opacity:0;}
+  }
+  #judge.show{animation:jpop .5s ease-out forwards;}
+  #combo{
+    position:fixed;left:50%;top:12%;transform:translateX(-50%);
+    font-size:17px;font-weight:900;color:var(--ink);
+    opacity:0;transition:opacity .2s;z-index:5;
+  }
+  #combo.on{opacity:.85;}
+
+  /* 스와이프 힌트 화살표 */
+  #hint{
+    position:fixed;left:50%;bottom:9%;transform:translateX(-50%);
+    font-size:12px;font-weight:700;opacity:.5;letter-spacing:.12em;
+    z-index:3;text-align:center;line-height:1.7;
+  }
+
+  .overlay{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;
+    background:rgba(255,217,59,.94);
+    text-align:center;padding:24px;z-index:10;
+  }
+  .overlay.hidden{display:none;}
+  .overlay h1{
+    font-size:44px;font-weight:900;letter-spacing:-.01em;
+    transform:rotate(-2deg);
+    text-shadow:4px 4px 0 #fff;
+  }
+  .overlay p{font-size:14px;line-height:1.8;max-width:300px;font-weight:600;opacity:.75;}
+  .overlay p b{color:var(--red);}
+  .overlay p .gold{color:var(--gold);}
+  .overlay .sub{font-size:11px;letter-spacing:.3em;font-weight:800;opacity:.55;}
+  /* 회차 뱃지 + 도발 자막 */
+  .round{
+    font-size:13px;font-weight:900;letter-spacing:.18em;
+    background:var(--ink);color:var(--bg);
+    padding:6px 16px;border-radius:999px;transform:rotate(-2deg);
+  }
+  .taunt{
+    font-size:13px;font-weight:800;opacity:.95;
+    background:#fff;padding:9px 16px;border-radius:12px;
+    box-shadow:3px 3px 0 rgba(32,35,45,.2);transform:rotate(1deg);
+  }
+  /* 성적표(상장) 카드 */
+  #report{
+    position:relative;width:100%;max-width:330px;
+    background:#fff;border:4px solid var(--ink);border-radius:18px;
+    padding:20px 24px 14px;
+    box-shadow:8px 10px 0 rgba(32,35,45,.25);transform:rotate(-1deg);
+    display:flex;flex-direction:column;align-items:center;gap:5px;
+  }
+  #report::before{
+    content:'';position:absolute;inset:6px;border-radius:12px;
+    border:2px dashed rgba(32,35,45,.25);pointer-events:none;
+  }
+  .rSeal{
+    position:absolute;top:-16px;right:-12px;width:64px;height:64px;
+    border-radius:50%;border:3px solid var(--red);color:var(--red);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:900;line-height:1.15;text-align:center;
+    transform:rotate(12deg);background:rgba(255,255,255,.9);
+  }
+  .rTier{font-size:29px;font-weight:900;letter-spacing:-.01em;}
+  .rAvg{font-size:54px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;}
+  .rAvg .unit{font-size:20px;font-weight:900;}
+  .rAvgLabel{font-size:11px;letter-spacing:.28em;font-weight:800;opacity:.55;}
+  .rSub{font-size:14px;font-weight:700;opacity:.8;font-variant-numeric:tabular-nums;}
+  .rLog{font-size:15px;letter-spacing:2px;line-height:1.55;white-space:pre;margin-top:3px;max-width:100%;overflow-x:auto;}
+  .rStats{font-size:12px;font-weight:800;opacity:.7;}
+  #repStamp{
+    display:none;background:var(--red);color:#fff;
+    font-weight:900;font-size:14px;padding:5px 13px;
+    border-radius:10px;border:3px solid var(--ink);
+    box-shadow:3px 3px 0 rgba(32,35,45,.3);transform:rotate(-4deg);
+    margin-top:2px;
+  }
+  #report #bestLine{margin:2px 0 0;}
+  .btnrow{display:flex;gap:12px;margin-top:6px;}
+  button{
+    margin-top:14px;padding:15px 48px;border:3px solid var(--ink);
+    border-radius:999px;background:var(--ink);color:var(--bg);
+    font-size:17px;font-weight:900;letter-spacing:.06em;
+    cursor:pointer;font-family:inherit;
+    box-shadow:5px 5px 0 rgba(32,35,45,.3);
+  }
+  .btnrow button{margin-top:0;padding:14px 24px;font-size:15px;}
+  button.ghost{background:transparent;color:var(--ink);box-shadow:5px 5px 0 rgba(32,35,45,.15);}
+  button:active{transform:translate(3px,3px);box-shadow:2px 2px 0 rgba(32,35,45,.3);}
+  /* 디버그 HUD (?debug=1) */
+  #debug{
+    position:fixed;left:12px;bottom:18px;z-index:9;
+    display:none;padding:6px 10px;border-radius:8px;
+    background:rgba(32,35,45,.82);color:#fff;
+    font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;
+    pointer-events:none;
+  }
+  #debug.on{display:block;}
+  @media (prefers-reduced-motion:reduce){
+    #stage::before{animation:none;}
+    #card.in{animation:none;}
+    #chara .body{animation:none;}          /* idle 숨쉬기 오프 */
+    #dust.puff i{animation:none;}          /* 착지 먼지 오프 */
+    #card.obey.in .shine::after{animation:none;}  /* 반짝이 스윕 오프 */
+    #goldPop.show{animation:none;}
+    #stage{transition:none;}
+    /* M2: 히트스톱·킥·흔들림·플래시·무지개 전부 오프 (JS에서도 REDUCED 가드) */
+    body.kick-up,body.kick-down,body.kick-left,body.kick-right{animation:none;}
+    body.shake{animation:none;}
+    #flash.go{animation:none;}
+    #rainbow.go{animation:none;}
+    #lives.danger{animation:none;}
+    #heartDrop.drop{animation:none;}
+    #card.reveal{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud">
+  <div class="block">
+    <span class="label">SCORE</span>
+    <span class="value" id="score">0</span>
+  </div>
+  <div class="block right">
+    <span class="label">LIFE</span>
+    <span class="value" id="lives">❤❤❤</span>
+  </div>
+</div>
+<div id="combo"></div>
+
+<div id="floor"></div>
+
+<div id="cardWrap">
+  <div id="card">
+    <div class="rule" id="ruleTxt">반대로!</div>
+    <div class="wordrow">
+      <div class="word" id="cmdTxt">점프!</div>
+      <div id="cmdArrow"></div>
+    </div>
+    <div class="shine"></div>
+    <div id="cmdTimer"><i id="cmdFill"></i></div>
+    <div id="goldPop">!!</div>
+    <div id="revealTag">이거였다고!</div>
+  </div>
+</div>
+
+<div id="chara">
+  <div class="shadow"></div>
+  <div class="body">
+    <div class="belly"></div>
+    <div class="cheek l"></div><div class="cheek r"></div>
+    <div class="tongue"></div>
+    <div class="mouth"></div>
+    <div class="leg l"></div><div class="leg r"></div>
+  </div>
+  <div class="eye l"><i></i></div>
+  <div class="eye r"><i></i></div>
+</div>
+<div id="dust"><i></i><i></i><i></i></div>
+
+<div id="judge"></div>
+<div id="sfxText"></div>
+<div id="deadTag"></div>
+<div id="rainbow"></div>
+<div id="flash"></div>
+<div id="heartDrop">💔</div>
+<div id="hint">↑ ↓ ← → 스와이프로 행동</div>
+<div id="timerbar"></div>
+<div id="debug"></div>
+
+<div class="overlay" id="startOv">
+  <h1>반대로 하기!</h1>
+  <div class="round" id="roundTag">#0000 회차</div>
+  <p>"점프!"라고 하면 <b>숙이고</b>,<br>"왼쪽!"이라고 하면 <b>오른쪽</b>으로.<br>
+  지시가 나오면 <b>반대 방향</b>으로 스와이프!<br><br>
+  단, <span class="gold">황금 카드 "그대로!"</span>가 뜨면<br>말 그대로 따라야 합니다 😈</p>
+  <p class="taunt" id="taunt"></p>
+  <div class="btnrow">
+    <button id="dailyBtn">오늘의 시험</button>
+    <button id="freeBtn" class="ghost">자유 연습</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOv">
+  <div id="report">
+    <div class="rSeal">참 잘<br>했어요</div>
+    <span class="sub" id="repRound">성적표</span>
+    <div class="rTier" id="repTier">-</div>
+    <div class="rAvg"><b id="repAvg">-</b><span class="unit">초</span></div>
+    <div class="rAvgLabel">평균 반응속도</div>
+    <div class="rSub">최고 <b id="repFast">-</b>초 · <b id="repScore">0</b>점</div>
+    <div class="rLog" id="repLog"></div>
+    <div class="rStats" id="repStats"></div>
+    <div id="repStamp">황금 카드에 낚임 🎣</div>
+    <p id="bestLine"></p>
+  </div>
+  <div class="btnrow">
+    <button id="copyBtn">성적표 복사</button>
+    <button id="retryBtn">다시!</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- Audio ----------
+  let AC=null;
+  function audio(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC;}
+  function tone(f,d=0.12,type='square',g=0.1,delay=0){
+    try{
+      const a=audio(),o=a.createOscillator(),gn=a.createGain();
+      const t=a.currentTime+delay;
+      o.type=type;o.frequency.value=f;
+      gn.gain.setValueAtTime(g,t);
+      gn.gain.exponentialRampToValueAtTime(0.001,t+d);
+      o.connect(gn);gn.connect(a.destination);o.start(t);o.stop(t+d);
+    }catch(e){}
+  }
+  const sfx={
+    ok(){tone(660,.08);tone(990,.1,'square',.08,.06);},
+    gold(){tone(784,.08,'triangle',.14);tone(1175,.12,'triangle',.12,.07);},
+    wrong(){tone(180,.25,'sawtooth',.14);},
+    tick(){tone(1200,.03,'sine',.05);},
+    start(){tone(523,.1);tone(659,.1,'square',.1,.1);tone(784,.14,'square',.1,.2);},
+  };
+
+  // ---------- 커맨드 정의 ----------
+  // dir: 지시어의 "문자 그대로" 방향
+  const CMDS=[
+    {word:'점프!',dir:'up'},
+    {word:'숙여!',dir:'down'},
+    {word:'왼쪽!',dir:'left'},
+    {word:'오른쪽!',dir:'right'},
+  ];
+  const OPP={up:'down',down:'up',left:'right',right:'left'};
+
+  // ---------- CONFIG (밸런스 숫자는 전부 여기서 조정) ----------
+  const CONFIG={
+    GAME_LEN:60,          // 총 제한시간(초)
+    LIVES:3,              // 목숨
+    CMD_TIME_START:2.0,   // 문제 제한시간 시작(초)
+    CMD_TIME_DEC:0.045,   // 문제당 제한시간 감소(초)
+    CMD_TIME_MIN:0.75,    // 제한시간 하한(초)
+    GOLD_UNLOCK:10,       // 이 문제 수를 넘긴 뒤부터 황금 카드 등장
+    GOLD_CHANCE:0.3,      // 황금 카드 확률
+    GOLD_MULT:1.5,        // 황금 카드 점수 배율
+    BASE_SCORE:10,        // 기본 점수
+    SPEED_BONUS:10,       // 스피드 보너스 계수
+    COMBO_STEP:0.1,       // 콤보 배율 증가폭
+    COMBO_CAP:15,         // 콤보 배율 상한
+    SWIPE_DEADZONE:24,    // 스와이프 최소 거리(px)
+    FAST_RT:0.4,          // 번개 반응 기준(초)
+    HITSTOP:0.05,         // 정답 히트스톱(초)
+    RAINBOW_COMBO:10,     // 무지개 스윕 발동 콤보
+    // 반응속도 칭호 경계값 (평균 반응속도 상한, 초)
+    TIERS:[
+      [0.55,'⚡ 초인 반사'],
+      [0.75,'🐆 치타급'],
+      [1.00,'🐰 토끼급'],
+      [1.40,'🐢 거북급'],
+      [Infinity,'🦥 나무늘보급'],
+    ],
+  };
+
+  // ---------- Debug / Force (?debug=1, ?force=obey|reverse) ----------
+  const QS=new URLSearchParams(location.search);
+  const DEBUG=QS.get('debug')==='1';
+  const FORCE=QS.get('force'); // 'obey' | 'reverse' | null
+
+  // ---------- Platform 어댑터 (M3까지 mock: localStorage + console) ----------
+  const Platform={
+    getUserId(){
+      let id=null;
+      try{id=localStorage.getItem('bandaero_uid');}catch(e){}
+      if(!id){id='u_'+Math.random().toString(36).slice(2,10);try{localStorage.setItem('bandaero_uid',id);}catch(e){}}
+      return id;
+    },
+    getServerTime(){return Date.now();}, // mock: 로컬 시간 (실연동 시 토스 서버 시간)
+    submitScore(score){console.log('[Platform] submitScore',score);},
+    openLeaderboard(){console.log('[Platform] openLeaderboard');},
+    share(payload){console.log('[Platform] share',payload);},
+    haptic(type){console.log('[Platform] haptic',type);},
+    save(key,val){try{localStorage.setItem('bandaero_'+key,JSON.stringify(val));}catch(e){}},
+    load(key){try{const v=localStorage.getItem('bandaero_'+key);return v?JSON.parse(v):null;}catch(e){return null;}},
+  };
+
+  // ---------- 데일리 시드 (mulberry32) ----------
+  function mulberry32(a){
+    return function(){
+      a|=0;a=a+0x6D2B79F5|0;
+      let t=Math.imul(a^a>>>15,1|a);
+      t=t+Math.imul(t^t>>>7,61|t)^t;
+      return((t^t>>>14)>>>0)/4294967296;
+    };
+  }
+  function dateKeyOf(ts){const d=new Date(ts);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+  function roundLabel(key){const s=String(key);return `#${s.slice(4,6)}${s.slice(6,8)} 회차`;}
+
+  const state={
+    running:false,timeLeft:CONFIG.GAME_LEN,
+    score:0,best:0,lives:CONFIG.LIVES,
+    combo:0,maxCombo:0,ok:0,fastest:Infinity,
+    cmd:null,obey:false,          // obey=true → 황금 "그대로!" 카드
+    cmdLimit:CONFIG.CMD_TIME_START,cmdT:0,cmdStart:0,
+    count:0,locked:false,
+    freeze:0,hbT:0,               // 히트스톱 / 심장박동 타이머
+    mode:'free',rng:Math.random,seedKey:0, // daily=시드 고정, free=매판 랜덤
+    log:[],rtSum:0,rtN:0,         // 문제별 기록 + 정답 반응속도 누계
+    goldSeen:0,goldOk:0,goldBait:false, // 황금 카드 통계 + 낚임 낙인
+  };
+
+  const $=id=>document.getElementById(id);
+  const scoreEl=$('score'),livesEl=$('lives'),bar=$('timerbar'),
+        card=$('card'),ruleTxt=$('ruleTxt'),cmdTxt=$('cmdTxt'),
+        cmdFill=$('cmdFill'),judgeEl=$('judge'),comboEl=$('combo'),
+        chara=$('chara'),debugEl=$('debug'),
+        cmdArrow=$('cmdArrow'),goldPop=$('goldPop'),dust=$('dust'),
+        sfxText=$('sfxText'),deadTag=$('deadTag'),rainbowEl=$('rainbow'),
+        flashEl=$('flash'),heartDrop=$('heartDrop');
+  if(DEBUG)debugEl.classList.add('on');
+  const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- M2: 임팩트 연출 (요소 재사용, DOM 생성 없음) ----------
+  const OK_POOL=['빠밤!','오케이!','천재냐?','좋았어!','완벽!'];
+  const DEAD_POOL=['아...','뇌 정지','아깝다!'];
+  function retrigger(el,cls){el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);}
+  function popSfx(txt){sfxText.textContent=txt;retrigger(sfxText,'show');}
+  function popDead(txt){deadTag.textContent=txt;retrigger(deadTag,'show');}
+  function kick(dir){
+    if(REDUCED)return;
+    document.body.classList.remove('kick-up','kick-down','kick-left','kick-right');
+    void document.body.offsetWidth;
+    document.body.classList.add('kick-'+dir);
+  }
+
+  // 현재 문제의 정답 방향
+  function correctDir(){return state.obey?state.cmd.dir:OPP[state.cmd.dir];}
+
+  function newCmd(){
+    state.count++;
+    // 데일리 모드: 시드 RNG를 문제당 2회(지시어·황금) 고정 순서로 소모 → 시퀀스 완전 재현
+    const cmdRoll=state.rng(),goldRoll=state.rng();
+    state.cmd=CMDS[Math.floor(cmdRoll*CMDS.length)];
+    // GOLD_UNLOCK 문제 이후 GOLD_CHANCE 확률로 황금 "그대로!" 카드
+    state.obey=FORCE==='obey'?true
+      :FORCE==='reverse'?false
+      :state.count>CONFIG.GOLD_UNLOCK&&goldRoll<CONFIG.GOLD_CHANCE;
+    if(state.obey)state.goldSeen++;
+    // 제한시간: CMD_TIME_START → 문제당 -CMD_TIME_DEC → 하한 CMD_TIME_MIN
+    state.cmdLimit=Math.max(CONFIG.CMD_TIME_MIN,
+      CONFIG.CMD_TIME_START-state.count*CONFIG.CMD_TIME_DEC);
+    state.cmdT=0;
+    state.cmdStart=performance.now();
+    state.locked=false;
+
+    card.classList.remove('reveal');
+    ruleTxt.textContent=state.obey?'그대로!':'반대로!';
+    cmdTxt.textContent=state.cmd.word;
+    // 예능 자막: 카드마다 -2°~2° 랜덤 기울기
+    card.style.setProperty('--tilt',(Math.random()*4-2).toFixed(1)+'deg');
+    // 화살표 스티커는 지시어의 '문자 그대로' 방향 (스트룹 혼란 강화)
+    cmdArrow.className=state.cmd.dir;
+    // 개구리 눈동자가 카드(지시어) 방향을 힐끔거림
+    const LOOK={up:[0,-6],down:[0,6],left:[-7,-2],right:[7,-2]};
+    chara.style.setProperty('--lx',LOOK[state.cmd.dir][0]+'px');
+    chara.style.setProperty('--ly',LOOK[state.cmd.dir][1]+'px');
+    card.classList.toggle('obey',state.obey);
+    card.classList.remove('in');void card.offsetWidth;
+    card.classList.add('in');
+    goldPop.classList.remove('show');
+    if(state.obey){void goldPop.offsetWidth;goldPop.classList.add('show');}
+    if(state.obey)sfx.gold();
+    resetChara();
+  }
+
+  // 콤보 5/10/15 표정 단계 + 무대 색 단계
+  function moodClass(){
+    return state.combo>=15?'mood3':state.combo>=10?'mood2':state.combo>=5?'mood1':'';
+  }
+  function setStage(){
+    document.body.dataset.stage=state.combo>=15?3:state.combo>=10?2:state.combo>=5?1:0;
+  }
+  function resetChara(){chara.className=moodClass();}
+  function actChara(dir){
+    chara.className=moodClass();void chara.offsetWidth;
+    chara.classList.add(dir);
+    setTimeout(()=>{
+      if(!chara.classList.contains('dead')){
+        resetChara();
+        if(dir==='up'&&!REDUCED)puffDust(); // 점프 착지 먼지
+      }
+    },300);
+  }
+  function puffDust(){
+    dust.classList.remove('puff');void dust.offsetWidth;
+    dust.classList.add('puff');
+  }
+
+  function answer(dir){
+    if(!state.running||state.locked)return;
+    state.locked=true;
+    actChara(dir);
+    const correct=correctDir();
+    const rt=(performance.now()-state.cmdStart)/1000;
+    if(DEBUG)console.log(`[debug] #${state.count} ${state.obey?'그대로':'반대로'} "${state.cmd.word}" 입력:${dir} 정답:${correct} 반응:${rt.toFixed(3)}s ${dir===correct?'⭕':'❌'}`);
+    if(dir===correct){
+      state.ok++;state.combo++;
+      state.maxCombo=Math.max(state.maxCombo,state.combo);
+      state.fastest=Math.min(state.fastest,rt);
+      state.rtSum+=rt;state.rtN++;
+      state.log.push(rt<=CONFIG.FAST_RT?'⚡':'⭕');
+      if(state.obey)state.goldOk++;
+      setStage();
+      // 빠를수록 보너스 + 콤보 배율 + 황금카드 보너스
+      const speedBonus=Math.max(0,Math.round((state.cmdLimit-rt)*CONFIG.SPEED_BONUS));
+      const mult=1+Math.min(state.combo,CONFIG.COMBO_CAP)*CONFIG.COMBO_STEP;
+      const gained=Math.round((CONFIG.BASE_SCORE+speedBonus)*mult*(state.obey?CONFIG.GOLD_MULT:1));
+      state.score+=gained;
+      scoreEl.textContent=state.score;
+      showJudge(`⭕ +${gained}`,'var(--green)');
+      // 얻어맞는 쾌감: 히트스톱 + 방향 킥 + 효과음 자막
+      if(!REDUCED)state.freeze=CONFIG.HITSTOP;
+      kick(dir);
+      if(rt<=CONFIG.FAST_RT){
+        popSfx('번개 반응 ⚡');
+        if(!REDUCED)retrigger(flashEl,'go');
+      }else{
+        popSfx(OK_POOL[Math.floor(Math.random()*OK_POOL.length)]);
+      }
+      if(state.combo>=CONFIG.RAINBOW_COMBO&&!REDUCED)retrigger(rainbowEl,'go');
+      state.obey?sfx.gold():sfx.ok();
+      if(state.combo>=3){
+        comboEl.textContent=`🔥 ${state.combo} COMBO`;
+        comboEl.classList.add('on');
+      }
+      setTimeout(()=>{if(state.running)newCmd();},220);
+    }else{
+      state.log.push('❌');
+      state.goldBait=state.obey; // 마지막 실수가 황금 카드 오답이었는지
+      // 황금 카드 오답은 전용 자막
+      fail(state.obey?'❌ 그대로 하라니까!':'❌ 반대라니까!',false);
+    }
+  }
+
+  function timeout(){
+    if(!state.running||state.locked)return;
+    state.locked=true;
+    state.log.push('⏰');
+    state.goldBait=false;
+    fail('⏰ 늦었다!',true);
+  }
+
+  function fail(msg,isTimeout){
+    state.combo=0;
+    setStage();
+    comboEl.classList.remove('on');
+    state.lives--;
+    livesEl.textContent='❤'.repeat(state.lives)+'♡'.repeat(CONFIG.LIVES-state.lives);
+    showJudge(msg,'var(--red)');
+    sfx.wrong();
+    chara.className='dead';
+    // 웃긴 굴욕: dead 자막 + 하트 낙하 + 정답 리빌(카드 확대 + 빨간 화살표)
+    popDead(isTimeout?'손이 굳었다!':DEAD_POOL[Math.floor(Math.random()*DEAD_POOL.length)]);
+    retrigger(heartDrop,'drop');
+    card.classList.add('reveal');
+    cmdArrow.className=correctDir(); // "이거였다고!"
+    if(!REDUCED){
+      retrigger(document.body,'shake');
+      document.body.classList.add('mono');
+      setTimeout(()=>document.body.classList.remove('mono'),400);
+    }
+    livesEl.classList.toggle('danger',state.lives===1);
+    if(state.lives<=0){setTimeout(endGame,500);return;}
+    // 연출과 진행 병렬화: 다음 라운드는 550ms 뒤 (리빌은 그동안 노출)
+    setTimeout(()=>{if(state.running)newCmd();},550);
+  }
+
+  function showJudge(txt,color){
+    judgeEl.textContent=txt;
+    judgeEl.style.color=color;
+    judgeEl.classList.remove('show');void judgeEl.offsetWidth;
+    judgeEl.classList.add('show');
+  }
+
+  // ---------- Loop ----------
+  let last=0,warned=false;
+  function loop(ts){
+    if(!last)last=ts;
+    const dt=Math.min((ts-last)/1000,.05);
+    last=ts;
+    if(state.running){
+      // 히트스톱: freeze 동안 게임 시간 정지
+      if(state.freeze>0){state.freeze-=dt;requestAnimationFrame(loop);return;}
+      state.timeLeft-=dt;
+      if(state.timeLeft<=0){state.timeLeft=0;endGame();}
+      bar.style.transform=`scaleX(${state.timeLeft/CONFIG.GAME_LEN})`;
+
+      if(!state.locked){
+        state.cmdT+=dt;
+        const p=1-state.cmdT/state.cmdLimit;
+        cmdFill.style.transform=`scaleX(${Math.max(0,p)})`;
+        // 목숨 1개면 제한시간 바 빨간색 고정
+        cmdFill.style.background=(state.lives===1||p<0.35)?'var(--red)':'var(--blue)';
+        if(p<0.35&&!warned){warned=true;sfx.tick();}
+        if(p>=0.35)warned=false;
+        if(state.cmdT>=state.cmdLimit)timeout();
+      }
+      // 목숨 1개: 심장박동 저음 (60bpm 사인파 킥)
+      if(state.lives===1){
+        state.hbT-=dt;
+        if(state.hbT<=0){state.hbT=1;tone(55,.15,'sine',.3);}
+      }
+      if(DEBUG&&state.cmd){
+        const ARROW={up:'↑',down:'↓',left:'←',right:'→'};
+        debugEl.textContent=`정답 ${ARROW[correctDir()]} · 남은 ${Math.max(0,state.cmdLimit-state.cmdT).toFixed(2)}s · 제한 ${state.cmdLimit.toFixed(2)}s`;
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Input: 스와이프 + 키보드 ----------
+  let sx=0,sy=0,swiping=false;
+  window.addEventListener('pointerdown',e=>{
+    if(e.target.tagName==='BUTTON')return;
+    sx=e.clientX;sy=e.clientY;swiping=true;
+  });
+  window.addEventListener('pointerup',e=>{
+    if(!swiping)return;swiping=false;
+    const dx=e.clientX-sx,dy=e.clientY-sy;
+    if(Math.hypot(dx,dy)<CONFIG.SWIPE_DEADZONE)return; // 너무 짧으면 무시
+    const dir=Math.abs(dx)>Math.abs(dy)
+      ?(dx>0?'right':'left')
+      :(dy>0?'down':'up');
+    answer(dir);
+  });
+  window.addEventListener('keydown',e=>{
+    const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+    if(map[e.code]){e.preventDefault();answer(map[e.code]);}
+    if(e.code==='Space'&&!state.running){e.preventDefault();startGame(state.mode);}
+  });
+
+  // ---------- Flow ----------
+  const startOv=$('startOv'),endOv=$('endOv');
+  function startGame(mode){
+    audio();sfx.start();
+    state.mode=mode||state.mode||'free';
+    // 데일리: 토스 서버 시간(mock: 로컬) 기준 YYYYMMDD 시드 → 모두 같은 문제 순서
+    state.seedKey=dateKeyOf(Platform.getServerTime());
+    state.rng=state.mode==='daily'?mulberry32(state.seedKey):Math.random;
+    Object.assign(state,{running:true,timeLeft:CONFIG.GAME_LEN,score:0,lives:CONFIG.LIVES,
+      combo:0,maxCombo:0,ok:0,fastest:Infinity,count:0,freeze:0,hbT:0,
+      log:[],rtSum:0,rtN:0,goldSeen:0,goldOk:0,goldBait:false,shareText:''});
+    scoreEl.textContent='0';
+    livesEl.textContent='❤'.repeat(CONFIG.LIVES);
+    livesEl.classList.remove('danger');
+    comboEl.classList.remove('on');
+    setStage();
+    startOv.classList.add('hidden');
+    endOv.classList.add('hidden');
+    newCmd();
+  }
+
+  // ---------- 성적표 ----------
+  function tierOf(avg){
+    for(const [max,name] of CONFIG.TIERS)if(avg<=max)return name;
+    return CONFIG.TIERS[CONFIG.TIERS.length-1][1];
+  }
+  function chunkLog(arr){
+    const lines=[];
+    for(let i=0;i<arr.length;i+=10)lines.push(arr.slice(i,i+10).join(''));
+    return lines.join('\n');
+  }
+  function endGame(){
+    state.running=false;
+    const avg=state.rtN?state.rtSum/state.rtN:0;
+    const avgTxt=state.rtN?avg.toFixed(2):'-';
+    const tier=state.rtN?tierOf(avg):CONFIG.TIERS[CONFIG.TIERS.length-1][1];
+    const roundTxt=state.mode==='daily'?roundLabel(state.seedKey):'자유 연습';
+    $('repRound').textContent=roundTxt+' 성적표';
+    $('repTier').textContent=tier;
+    $('repAvg').textContent=avgTxt;
+    $('repFast').textContent=state.fastest<Infinity?state.fastest.toFixed(2):'-';
+    $('repScore').textContent=state.score.toLocaleString();
+    $('repLog').textContent=chunkLog(state.log);
+    $('repStats').textContent=`성공 ${state.ok} · 최대콤보 ${state.maxCombo} · 황금카드 ${state.goldOk}/${state.goldSeen}`;
+    // 게임오버가 황금 카드 오답이었으면 낙인 (역바이럴)
+    const baited=state.lives<=0&&state.goldBait;
+    $('repStamp').style.display=baited?'inline-block':'none';
+    // 기록 저장: 통산 최고 콤보 / 통산 평균 반응속도
+    const at=Platform.load('allTime')||{maxCombo:0,rtSum:0,rtN:0};
+    at.maxCombo=Math.max(at.maxCombo,state.maxCombo);
+    at.rtSum+=state.rtSum;at.rtN+=state.rtN;
+    Platform.save('allTime',at);
+    if(state.mode==='daily'){
+      const key='daily_'+state.seedKey,rec=Platform.load(key);
+      const isBest=!rec||state.score>rec.best;
+      if(isBest)Platform.save(key,{best:state.score,avgRt:avg});
+      $('bestLine').textContent=isBest&&state.score>0
+        ?'🏆 오늘 회차 신기록!':`오늘 회차 최고: ${rec?rec.best:0}`;
+    }else{
+      const isBest=state.score>state.best;
+      state.best=Math.max(state.best,state.score);
+      $('bestLine').textContent=isBest&&state.score>0
+        ?'🏆 청개구리 챔피언!':`세션 최고: ${state.best}`;
+    }
+    Platform.submitScore(state.score);
+    // Wordle식 공유 텍스트
+    state.shareText=[
+      `🐸 반대로 하기 — ${roundTxt}`,
+      `${tier} · ${state.score.toLocaleString()}점 · 평균 ${avgTxt}s`,
+      chunkLog(state.log),
+      `최대콤보 ${state.maxCombo} · 황금카드 ${state.goldOk}/${state.goldSeen}`,
+    ].concat(baited?['황금 카드에 낚임 🎣']:[]).join('\n');
+    endOv.classList.remove('hidden');
+  }
+
+  // ---------- 도발 문구 (자정 경계 대응: 표시 시점마다 재계산) ----------
+  function refreshTaunt(){
+    const now=Platform.getServerTime();
+    $('roundTag').textContent=roundLabel(dateKeyOf(now));
+    const y=Platform.load('daily_'+dateKeyOf(now-86400000));
+    $('taunt').textContent=(y&&y.avgRt)
+      ?`어제의 너: 평균 ${y.avgRt.toFixed(2)}s. 오늘은 이겨보자`
+      :'인간 평균 반응속도는 0.25초… 라던데?';
+  }
+  refreshTaunt();
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshTaunt();});
+
+  $('dailyBtn').addEventListener('click',()=>startGame('daily'));
+  $('freeBtn').addEventListener('click',()=>startGame('free'));
+  $('retryBtn').addEventListener('click',()=>startGame(state.mode));
+  $('copyBtn').addEventListener('click',()=>{
+    const t=state.shareText||'';
+    Platform.share({text:t});
+    const done=()=>{
+      $('copyBtn').textContent='복사 완료!';
+      setTimeout(()=>{$('copyBtn').textContent='성적표 복사';},1200);
+    };
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(done)
+        .catch(()=>prompt('아래 내용을 복사하세요',t));
+    }else{
+      prompt('아래 내용을 복사하세요',t);
+    }
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+<!-- CHANGELOG
+M0: 밸런스 숫자 전부 CONFIG 객체로 승격 (동작 동일). ?debug=1 → 정답 화살표·남은 제한시간 HUD + 반응속도 콘솔 로그.
+    ?force=obey|reverse → 카드 유형 강제. 파라미터 없으면 프로토타입과 완전 동일.
+M1: 청개구리 캐릭터(왕눈+동공 힐끔·숨쉬기·발 들기·X눈+혀·콤보 5/10/15 표정 단계), 카드 예능 자막화(랜덤 기울기·
+    방향 화살표 스티커·황금 그라데이션+반짝 스윕+"!!"팝), 콤보 구간별 무대색(노랑→주황→핑크→보라)·바닥 단상·착지 먼지.
+    상태 클래스 인터페이스 유지, reduced-motion 폴백 확장.
+M2: 정답 임팩트(히트스톱 50ms·4px 방향 킥·"빠밤!" 효과음 자막·콤보10 무지개 스윕·번개 반응 플래시),
+    오답 임팩트(카드 확대+빨간 정답 화살표 "이거였다고!"·±6px 흔들림·0.4s 무채색화·dead 자막 풀·하트 낙하),
+    황금 카드 오답 전용 자막 "그대로 하라니까!", 목숨 1개 긴장 연출(하트 점멸·빨간 바 고정·60bpm 심장박동). 자막 요소 전부 재사용.
+M3: Platform 어댑터 mock(localStorage+console), 데일리 모드(mulberry32 YYYYMMDD 시드, 문제당 2롤 고정 소모로 시퀀스 재현),
+    시작 화면 [오늘의 시험/자유 연습]+#MMDD 회차+도발 문구(표시 시점 재계산), 성적표 결과 화면(칭호·평균/최고 반응속도·
+    이모지 로그 10개/줄·복사 버튼+prompt 폴백), 황금 카드 낚임 낙인, 통산 기록 저장(회차 최고점·최고 콤보·평균 반응속도).
+-->
+</body>
+</html>
