@@ -13,6 +13,13 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<!-- 링크 미리보기 카드 (카카오톡 등) -->
+<meta property="og:title" content="반대로 하기!">
+<meta property="og:description" content="지시의 반대로 스와이프! 1분 반사신경 청개구리 게임 🐸">
+<meta property="og:image" content="https://neoniceman.github.io/bandaero/icon-512.png">
+<meta property="og:url" content="https://neoniceman.github.io/bandaero/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
 <style>
   :root{
     --bg:#ffd93b;
@@ -1000,15 +1007,99 @@
   $('dailyBtn').addEventListener('click',()=>startGame('daily'));
   $('freeBtn').addEventListener('click',()=>startGame('free'));
   $('retryBtn').addEventListener('click',()=>startGame(state.mode));
-  $('copyBtn').addEventListener('click',()=>{
+
+  // ---------- 성적표 이미지 (공유용 PNG를 캔버스로 렌더) ----------
+  function rrect(x,X,Y,W,H,r){
+    x.beginPath();x.moveTo(X+r,Y);
+    x.arcTo(X+W,Y,X+W,Y+H,r);x.arcTo(X+W,Y+H,X,Y+H,r);
+    x.arcTo(X,Y+H,X,Y,r);x.arcTo(X,Y,X+W,Y,r);x.closePath();
+  }
+  function drawReportCard(){
+    return new Promise((res,rej)=>{
+      const FONT='"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif';
+      const INK='#20232d',RED='#ff4d5e';
+      const logLines=$('repLog').textContent?$('repLog').textContent.split('\n'):[];
+      const baited=$('repStamp').style.display!=='none';
+      const W=720;
+      // 세로 배치는 로그 줄 수에 따라 가변
+      const H=560+logLines.length*54+(baited?90:0)+110;
+      const c=document.createElement('canvas');c.width=W;c.height=H;
+      const x=c.getContext('2d');
+      // 배경: 노랑 + 사선 스트라이프
+      x.fillStyle='#ffd93b';x.fillRect(0,0,W,H);
+      x.save();x.translate(W/2,H/2);x.rotate(Math.PI/4);
+      x.fillStyle='rgba(255,255,255,.18)';
+      const D=Math.max(W,H);
+      for(let i=-Math.ceil(D/52);i<=Math.ceil(D/52);i+=2)x.fillRect(i*52-26,-D,52,D*2);
+      x.restore();
+      // 상장 카드
+      rrect(x,40,56,W-80,H-112,26);
+      x.fillStyle='#fff';x.fill();
+      x.lineWidth=8;x.strokeStyle=INK;x.stroke();
+      x.setLineDash([10,8]);
+      rrect(x,60,76,W-120,H-152,16);
+      x.lineWidth=3;x.strokeStyle='rgba(32,35,45,.25)';x.stroke();
+      x.setLineDash([]);
+      // 본문 (결과 화면 DOM 값을 그대로 사용 → 항상 현재 판 결과)
+      const cx=W/2;x.textAlign='center';
+      x.font='800 26px '+FONT;x.fillStyle='rgba(32,35,45,.55)';
+      x.fillText($('repRound').textContent,cx,150);
+      x.font='900 54px '+FONT;x.fillStyle=INK;
+      x.fillText($('repTier').textContent,cx,232);
+      x.font='900 104px '+FONT;
+      x.fillText($('repScore').textContent+'점',cx,358);
+      x.font='700 30px '+FONT;x.fillStyle='rgba(32,35,45,.75)';
+      x.fillText(`평균 ${$('repAvg').textContent}초 · 최고 ${$('repFast').textContent}초`,cx,416);
+      x.font='38px '+FONT;x.fillStyle=INK;
+      let y=488;
+      logLines.forEach(ln=>{x.fillText(ln,cx,y);y+=54;});
+      x.font='800 27px '+FONT;x.fillStyle='rgba(32,35,45,.7)';
+      x.fillText($('repStats').textContent,cx,y+8);y+=8;
+      if(baited){
+        y+=76;
+        x.save();x.translate(cx,y);x.rotate(-4*Math.PI/180);
+        x.font='900 34px '+FONT;
+        const label='황금 카드에 낚임 🎣';
+        const tw=x.measureText(label).width;
+        rrect(x,-tw/2-22,-38,tw+44,56,14);
+        x.fillStyle=RED;x.fill();x.lineWidth=6;x.strokeStyle=INK;x.stroke();
+        x.fillStyle='#fff';x.fillText(label,0,4);
+        x.restore();
+      }
+      // "참 잘했어요" 도장
+      x.save();x.translate(W-128,140);x.rotate(12*Math.PI/180);
+      x.beginPath();x.arc(0,0,64,0,Math.PI*2);
+      x.fillStyle='rgba(255,255,255,.92)';x.fill();
+      x.lineWidth=6;x.strokeStyle=RED;x.stroke();
+      x.fillStyle=RED;x.font='900 26px '+FONT;x.textAlign='center';
+      x.fillText('참 잘',0,-4);x.fillText('했어요',0,26);
+      x.restore();
+      // 푸터: 게임 주소
+      x.font='700 24px '+FONT;x.fillStyle='rgba(32,35,45,.55)';x.textAlign='center';
+      x.fillText('🐸 '+location.host+location.pathname,cx,H-84);
+      c.toBlob(b=>b?res(b):rej(new Error('toBlob 실패')),'image/png');
+    });
+  }
+
+  $('copyBtn').addEventListener('click',async()=>{
     const t=state.shareText||'';
+    const url=location.origin+location.pathname;
     Platform.share({text:t});
-    // 1순위: OS 공유 시트(Web Share API) → 미지원 시 클립보드 → 실패 시 prompt
     if(navigator.share){
-      navigator.share({title:'반대로 하기!',text:t,url:location.origin+location.pathname})
-        .catch(()=>{}); // 사용자가 시트를 닫은 경우 등은 무시
-      return;
+      // 1순위: 성적표 이미지 첨부 공유 (Web Share Level 2)
+      try{
+        const blob=await drawReportCard();
+        const file=new File([blob],'bandaero-report.png',{type:'image/png'});
+        if(navigator.canShare&&navigator.canShare({files:[file]})){
+          await navigator.share({files:[file],title:'반대로 하기!',text:t+'\n'+url});
+          return;
+        }
+      }catch(e){if(e&&e.name==='AbortError')return;} // 시트 닫음 → 종료
+      // 2순위: 텍스트+URL 공유 (이미지 미지원 대상)
+      try{await navigator.share({title:'반대로 하기!',text:t,url});return;}
+      catch(e){if(e&&e.name==='AbortError')return;}
     }
+    // 3순위: 클립보드 → prompt
     const done=()=>{
       $('copyBtn').textContent='복사 완료!';
       setTimeout(()=>{$('copyBtn').textContent='자랑하기!';},1200);
@@ -1038,6 +1129,8 @@ M3: Platform 어댑터 mock(localStorage+console), 데일리 모드(mulberry32 Y
     이모지 로그 10개/줄·복사 버튼+prompt 폴백), 황금 카드 낚임 낙인, 통산 기록 저장(회차 최고점·최고 콤보·평균 반응속도).
 M3+: 성적표 "자랑하기" — Web Share API 우선(제목+성적표+게임 URL), 미지원 시 클립보드→prompt 폴백.
      홈 화면 바로가기: PWA manifest + 청개구리 아이콘(icon-192/512, apple-touch-icon) + theme-color.
+M3++: 자랑하기에 성적표 이미지 첨부 — 현재 판 결과(점수·칭호·평균/최고·로그·낚임)를 캔버스 PNG로 렌더해
+      navigator.share files로 공유(미지원 시 텍스트 공유→클립보드→prompt 순 폴백). 링크 미리보기용 OG 태그 추가.
 -->
 </body>
 </html>
