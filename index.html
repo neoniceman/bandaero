@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>반대로 하기</title>
 <!-- 홈 화면 바로가기 (PWA) -->
 <meta name="theme-color" content="#ffd93b">
@@ -76,7 +76,9 @@
   .hud{
     position:fixed;top:0;left:0;right:0;
     display:flex;justify-content:space-between;align-items:flex-start;
-    padding:16px 20px;pointer-events:none;z-index:5;
+    /* 노치·다이나믹 아일랜드 대응 (웹에서는 0으로 폴백) */
+    padding:calc(16px + env(safe-area-inset-top,0px)) 20px 16px;
+    pointer-events:none;z-index:5;
     font-variant-numeric:tabular-nums;
   }
   .hud .block{display:flex;flex-direction:column;gap:1px;}
@@ -85,7 +87,9 @@
   .hud .right{text-align:right;}
   #lives{font-size:20px;letter-spacing:2px;}
   #timerbar{
-    position:fixed;bottom:0;left:0;height:6px;width:100%;
+    position:fixed;bottom:0;left:0;width:100%;
+    /* 홈 인디케이터 위로 보이도록 (웹에서는 6px 그대로) */
+    height:calc(6px + env(safe-area-inset-bottom,0px));
     background:var(--ink);transform-origin:left;z-index:5;
   }
 
@@ -493,7 +497,7 @@
   button:active{transform:translate(3px,3px);box-shadow:2px 2px 0 rgba(32,35,45,.3);}
   /* 설정 버튼 + 설정 시트 */
   #setBtn{
-    position:absolute;top:18px;right:18px;margin:0;
+    position:absolute;top:calc(18px + env(safe-area-inset-top,0px));right:18px;margin:0;
     padding:9px 18px;font-size:13px;
     background:transparent;color:var(--ink);
     box-shadow:4px 4px 0 rgba(32,35,45,.15);
