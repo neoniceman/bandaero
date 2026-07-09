@@ -518,6 +518,21 @@
   button.seg.on{background:var(--ink);color:var(--bg);}
   #setClose{margin-top:2px;padding:10px 32px;font-size:14px;}
 
+  /* 모바일 가로모드 안내 (세로 전용) — 데스크톱(키보드 플레이)은 해당 없음 */
+  #rotateOv{
+    position:fixed;inset:0;z-index:20;background:var(--ink);
+    display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  }
+  @media (orientation:landscape) and (max-height:500px){
+    #rotateOv{display:flex;}
+  }
+  #rotateOv .phone{
+    width:66px;height:38px;border:4px solid #fff;border-radius:9px;
+    animation:rotph 1.6s ease-in-out infinite;
+  }
+  @keyframes rotph{0%,15%{transform:rotate(0);}55%,100%{transform:rotate(90deg);}}
+  #rotateTxt{color:#fff;font-size:18px;font-weight:900;letter-spacing:.04em;}
+
   /* 리워드 부활 시트 */
   #reviveOv{z-index:12;background:rgba(32,35,45,.55);}
   #revSheet{
@@ -610,6 +625,7 @@
     /* 부활 하트·광고 라벨 펄스 오프 */
     .revHeart{animation:none;}
     #adLabel{animation:none;}
+    #rotateOv .phone{animation:none;transform:rotate(90deg);}
   }
 </style>
 </head>
@@ -713,6 +729,8 @@
     <button id="retryBtn">다시!</button>
   </div>
 </div>
+
+<div id="rotateOv"><div class="phone"></div><div id="rotateTxt">세로로 돌려주세요!</div></div>
 
 <div class="overlay hidden" id="reviveOv">
   <div id="revSheet">
@@ -950,6 +968,7 @@
       reviveSub:'광고 보면 하트 1개로 이어서 도전!',
       reviveYes:'광고 보고 부활!',
       reviveNo:'그만하기',
+      rotate:'세로로 돌려주세요!',
     },
     en:{
       title:'Opposite Day!',
@@ -994,6 +1013,7 @@
       reviveSub:'Watch an ad, get 1 heart, keep going!',
       reviveYes:'Revive with an ad!',
       reviveNo:'No thanks',
+      rotate:'Please rotate your device!',
     },
   };
   // 저장된 설정 > 기기 언어(ko면 한국어) > 영어
@@ -1470,6 +1490,7 @@
     $('setClose').textContent=t('close');
     $('tutTxt').innerHTML=t('tutMain');
     $('tutSub').innerHTML=t('tutSub');
+    $('rotateTxt').textContent=t('rotate');
     ruleTxt.textContent=t('ruleReverse'); // 대기 카드 기본값
     cmdTxt.textContent=t('cmdUp');
     $('langKo').classList.toggle('on',LANG==='ko');
@@ -1635,6 +1656,8 @@ M4-3: i18n(ko/en) — STR 사전+t()/tf(), 기기 언어 ko→한국어·그 외
 M4-4: CrazyGames SDK v3 연동 — 동적 로드(미탑재 환경은 광고 없이 완전 동작), 3판마다 미드게임 광고(+쿨다운 75s, CONFIG),
       게임오버 리워드 부활(자유 연습 한정 판당 1회, 데일리 제외), 광고 중 음소거+입력 차단, gameplayStart/Stop·happytime,
       ?mockads=1 가짜 광고 테스트. 출시 절차는 CRAZYGAMES.md 참조.
+M4-5: 모바일 세로 전용 대응 — 모바일 가로 회전 시(landscape+높이 500px 이하) "세로로 돌려주세요" 오버레이(i18n).
+      데스크톱 가로 플레이는 영향 없음.
 -->
 </body>
 </html>
