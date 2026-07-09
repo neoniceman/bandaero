@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>반대로 하기</title>
+<!-- 홈 화면 바로가기 (PWA) -->
+<meta name="theme-color" content="#ffd93b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="반대로">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>
   :root{
     --bg:#ffd93b;
@@ -558,7 +567,7 @@
     <p id="bestLine"></p>
   </div>
   <div class="btnrow">
-    <button id="copyBtn">성적표 복사</button>
+    <button id="copyBtn">자랑하기!</button>
     <button id="retryBtn">다시!</button>
   </div>
 </div>
@@ -994,9 +1003,15 @@
   $('copyBtn').addEventListener('click',()=>{
     const t=state.shareText||'';
     Platform.share({text:t});
+    // 1순위: OS 공유 시트(Web Share API) → 미지원 시 클립보드 → 실패 시 prompt
+    if(navigator.share){
+      navigator.share({title:'반대로 하기!',text:t,url:location.origin+location.pathname})
+        .catch(()=>{}); // 사용자가 시트를 닫은 경우 등은 무시
+      return;
+    }
     const done=()=>{
       $('copyBtn').textContent='복사 완료!';
-      setTimeout(()=>{$('copyBtn').textContent='성적표 복사';},1200);
+      setTimeout(()=>{$('copyBtn').textContent='자랑하기!';},1200);
     };
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(t).then(done)
