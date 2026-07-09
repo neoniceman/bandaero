@@ -518,6 +518,30 @@
   button.seg.on{background:var(--ink);color:var(--bg);}
   #setClose{margin-top:2px;padding:10px 32px;font-size:14px;}
 
+  /* 리워드 부활 시트 */
+  #reviveOv{z-index:12;background:rgba(32,35,45,.55);}
+  #revSheet{
+    width:100%;max-width:320px;
+    background:#fff;border:4px solid var(--ink);border-radius:18px;
+    padding:24px 26px;
+    box-shadow:8px 10px 0 rgba(32,35,45,.25);transform:rotate(-1deg);
+    display:flex;flex-direction:column;gap:12px;align-items:center;
+  }
+  .revHeart{
+    font-size:44px;color:var(--red);line-height:1;
+    animation:hbeat 1s ease-in-out infinite;
+  }
+  @keyframes hbeat{0%,100%{transform:scale(1);}30%{transform:scale(1.18);}45%{transform:scale(1);}60%{transform:scale(1.12);}}
+  #revYes{padding:14px 22px;font-size:15px;margin-top:0;}
+  #revNo{padding:14px 22px;font-size:15px;margin-top:0;}
+  /* 광고 목업 오버레이 (?mockads=1) */
+  #adOv{z-index:13;background:rgba(32,35,45,.92);}
+  #adLabel{
+    color:#fff;font-size:30px;font-weight:900;letter-spacing:.2em;
+    animation:adpulse 1s ease-in-out infinite;
+  }
+  @keyframes adpulse{50%{opacity:.5;}}
+
   /* 스와이프 온보딩 (첫 플레이 1회) */
   #tutOv{background:rgba(32,35,45,.62);gap:18px;z-index:11;}
   #tutArrow{
@@ -583,6 +607,9 @@
     /* 점수 또로롱 오프 (즉시 반영) */
     #score.punch,#score.punchBig{animation:none;}
     #flyScore.go{animation:none;}
+    /* 부활 하트·광고 라벨 펄스 오프 */
+    .revHeart{animation:none;}
+    #adLabel{animation:none;}
   }
 </style>
 </head>
@@ -687,6 +714,22 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="reviveOv">
+  <div id="revSheet">
+    <div class="revHeart">❤</div>
+    <div class="setTitle" id="revTitle">여기서 끝?</div>
+    <div class="setLabel" id="revSub">광고 보면 하트 1개로 이어서 도전!</div>
+    <div class="btnrow">
+      <button id="revYes">광고 보고 부활!</button>
+      <button id="revNo" class="ghost">그만하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="adOv">
+  <div id="adLabel">AD (mock)</div>
+</div>
+
 <div class="overlay hidden" id="tutOv">
   <div id="tutArrow"></div>
   <div id="tutHand"><i></i></div>
@@ -697,9 +740,10 @@
 <script>
 (() => {
   // ---------- Audio ----------
-  let AC=null;
+  let AC=null,MUTED=false; // MUTED: 광고 재생 중 등
   function audio(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC;}
   function tone(f,d=0.12,type='square',g=0.1,delay=0){
+    if(MUTED)return;
     try{
       const a=audio(),o=a.createOscillator(),gn=a.createGain();
       const t=a.currentTime+delay;
@@ -748,6 +792,10 @@
     FAST_RT:0.4,          // 번개 반응 기준(초)
     HITSTOP:0.05,         // 정답 히트스톱(초)
     RAINBOW_COMBO:10,     // 무지개 스윕 발동 콤보
+    // 광고 (CrazyGames)
+    AD_EVERY:3,           // 몇 판마다 미드게임 광고 요청
+    AD_COOLDOWN:75,       // 광고 최소 간격(초) — 플레이 제한 아님
+    REVIVE_MAX:1,         // 판당 리워드 부활 횟수 (자유 연습 한정)
     // 반응속도 칭호 경계값 (평균 반응속도 상한, 초 / 표시명은 i18n STR의 tier0~4)
     TIERS:[
       [0.55,'tier0'],   // ⚡ 초인 반사
@@ -780,6 +828,71 @@
     save(key,val){try{localStorage.setItem('bandaero_'+key,JSON.stringify(val));}catch(e){}},
     load(key){try{const v=localStorage.getItem('bandaero_'+key);return v?JSON.parse(v):null;}catch(e){return null;}},
   };
+
+  // ---------- CrazyGames SDK 어댑터 ----------
+  // SDK가 없는 환경(GitHub Pages·앱인토스 등)에서는 광고 없이 완전 동작.
+  // ?mockads=1: 로컬 테스트용 가짜 광고.
+  const MOCK_ADS=QS.get('mockads')==='1';
+  const CG={
+    ready:false,env:'none',
+    gamesSinceAd:0,lastAdAt:-Infinity,
+    async init(){
+      if(MOCK_ADS){this.ready=true;this.env='mock';return;}
+      try{
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://sdk.crazygames.com/crazygames-sdk-v3.js';
+          s.async=true;s.onload=res;s.onerror=rej;
+          document.head.appendChild(s);
+          setTimeout(rej,5000);
+        });
+        await window.CrazyGames.SDK.init();
+        this.env=window.CrazyGames.SDK.environment; // 'crazygames'|'local'|'disabled'
+        this.ready=this.env==='crazygames'||this.env==='local';
+        if(this.ready)window.CrazyGames.SDK.game.loadingStop();
+      }catch(e){this.ready=false;}
+      console.log('[CG] env:',this.env,'ads:',this.ready);
+    },
+    gameplayStart(){try{if(this.ready&&!MOCK_ADS)window.CrazyGames.SDK.game.gameplayStart();}catch(e){}},
+    gameplayStop(){try{if(this.ready&&!MOCK_ADS)window.CrazyGames.SDK.game.gameplayStop();}catch(e){}},
+    happytime(){try{if(this.ready&&!MOCK_ADS)window.CrazyGames.SDK.game.happytime();}catch(e){}},
+    // 미드게임 광고를 요청해도 되는 타이밍인지 (판수 + 쿨다운. 쿨다운은 광고 최소 간격일 뿐 플레이 제한 아님)
+    canMidgame(){
+      return this.ready
+        &&this.gamesSinceAd>=CONFIG.AD_EVERY
+        &&(performance.now()-this.lastAdAt)/1000>=CONFIG.AD_COOLDOWN;
+    },
+    canRewarded(){return this.ready;},
+    // done(rewarded): 광고 종료/실패 시 항상 호출. rewarded=끝까지 시청 여부
+    requestAd(type,done){
+      const finish=ok=>{
+        adActive(false);
+        if(ok){this.lastAdAt=performance.now();this.gamesSinceAd=0;}
+        done(ok);
+      };
+      if(MOCK_ADS){
+        adActive(true);
+        $('adLabel').textContent=(type==='rewarded'?'REWARDED ':'')+'AD (mock)';
+        $('adOv').classList.remove('hidden');
+        setTimeout(()=>{$('adOv').classList.add('hidden');finish(true);},1400);
+        return;
+      }
+      if(!this.ready){done(false);return;}
+      try{
+        window.CrazyGames.SDK.ad.requestAd(type,{
+          adStarted:()=>adActive(true),
+          adFinished:()=>finish(true),
+          adError:()=>finish(false),
+        });
+      }catch(e){adActive(false);done(false);}
+    },
+  };
+  // 광고 재생 중: 사운드 음소거 + 게임 입력 차단
+  let AD_BLOCK=false;
+  function adActive(on){
+    MUTED=on;
+    AD_BLOCK=on;
+  }
 
   // ---------- 데일리 시드 (mulberry32) ----------
   function mulberry32(a){
@@ -833,6 +946,10 @@
       cvAvg:'평균 {a}초 · 최고 {f}초',
       seal1:'참 잘',seal2:'했어요',
       settings:'설정',close:'닫기',langLabel:'언어 · Language',
+      reviveTitle:'여기서 끝?',
+      reviveSub:'광고 보면 하트 1개로 이어서 도전!',
+      reviveYes:'광고 보고 부활!',
+      reviveNo:'그만하기',
     },
     en:{
       title:'Opposite Day!',
@@ -873,6 +990,10 @@
       cvAvg:'Avg {a}s · Best {f}s',
       seal1:'GREAT',seal2:'JOB!',
       settings:'Settings',close:'Close',langLabel:'Language · 언어',
+      reviveTitle:'Game over?',
+      reviveSub:'Watch an ad, get 1 heart, keep going!',
+      reviveYes:'Revive with an ad!',
+      reviveNo:'No thanks',
     },
   };
   // 저장된 설정 > 기기 언어(ko면 한국어) > 영어
@@ -892,6 +1013,7 @@
     count:0,locked:false,
     freeze:0,hbT:0,               // 히트스톱 / 심장박동 타이머
     tutorial:false,               // 첫 플레이 스와이프 온보딩 중
+    revives:0,                    // 이번 판 리워드 부활 사용 횟수
     mode:'free',rng:Math.random,seedKey:0, // daily=시드 고정, free=매판 랜덤
     log:[],rtSum:0,rtN:0,         // 문제별 기록 + 정답 반응속도 누계
     goldSeen:0,goldOk:0,goldBait:false, // 황금 카드 통계 + 낚임 낙인
@@ -1011,6 +1133,7 @@
   }
 
   function answer(dir){
+    if(AD_BLOCK)return; // 광고 재생 중
     if(state.tutorial){tutorialSwipe(dir);return;} // 온보딩 중엔 판정 대신 연습
     if(!state.running||state.locked)return;
     state.locked=true;
@@ -1087,9 +1210,40 @@
       setTimeout(()=>document.body.classList.remove('mono'),400);
     }
     livesEl.classList.toggle('danger',state.lives===1);
-    if(state.lives<=0){setTimeout(endGame,500);return;}
+    if(state.lives<=0){
+      // 자유 연습 한정, 판당 REVIVE_MAX회: 리워드 광고 부활 제안
+      if(CG.canRewarded()&&state.mode!=='daily'&&state.revives<CONFIG.REVIVE_MAX){
+        state.running=false; // 전체 시계 정지 (부활 대기 동안)
+        CG.gameplayStop();
+        setTimeout(offerRevive,650);
+      }else{
+        setTimeout(endGame,500);
+      }
+      return;
+    }
     // 연출과 진행 병렬화: 다음 라운드는 550ms 뒤 (리빌은 그동안 노출)
     setTimeout(()=>{if(state.running)newCmd();},550);
+  }
+
+  // ---------- 리워드 부활 ----------
+  function offerRevive(){
+    $('revTitle').textContent=t('reviveTitle');
+    $('revSub').textContent=t('reviveSub');
+    $('revYes').textContent=t('reviveYes');
+    $('revNo').textContent=t('reviveNo');
+    $('reviveOv').classList.remove('hidden');
+  }
+  function closeRevive(){$('reviveOv').classList.add('hidden');}
+  function doRevive(){
+    state.revives++;
+    state.lives=1;
+    livesEl.textContent='❤'+'♡'.repeat(CONFIG.LIVES-1);
+    livesEl.classList.add('danger');
+    closeRevive();
+    resetChara();
+    state.running=true;
+    CG.gameplayStart();
+    newCmd();
   }
 
   function showJudge(txt,color){
@@ -1153,7 +1307,8 @@
   window.addEventListener('keydown',e=>{
     const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(map[e.code]){e.preventDefault();answer(map[e.code]);}
-    if(e.code==='Space'&&!state.running&&!state.tutorial){e.preventDefault();startGame(state.mode);}
+    if(e.code==='Space'&&!state.running&&!state.tutorial&&!AD_BLOCK
+      &&$('reviveOv').classList.contains('hidden')){e.preventDefault();requestStart(state.mode);}
   });
 
   // ---------- Flow ----------
@@ -1164,10 +1319,11 @@
     // 데일리: 토스 서버 시간(mock: 로컬) 기준 YYYYMMDD 시드 → 모두 같은 문제 순서
     state.seedKey=dateKeyOf(Platform.getServerTime());
     state.rng=state.mode==='daily'?mulberry32(state.seedKey):Math.random;
-    Object.assign(state,{running:false,tutorial:false,
+    Object.assign(state,{running:false,tutorial:false,revives:0,
       timeLeft:CONFIG.GAME_LEN,score:0,lives:CONFIG.LIVES,
       combo:0,maxCombo:0,ok:0,fastest:Infinity,count:0,freeze:0,hbT:0,
       log:[],rtSum:0,rtN:0,goldSeen:0,goldOk:0,goldBait:false,shareText:''});
+    $('reviveOv').classList.add('hidden');
     clearTimeout(scoreSafety);cancelAnimationFrame(scoreRaf); // 이전 판 트윈 정리
     scoreEl.textContent='0';
     scoreEl.classList.remove('punch','punchBig');
@@ -1190,7 +1346,17 @@
   }
   function beginRun(){
     state.running=true;
+    CG.gameplayStart();
     newCmd();
+  }
+  // 시작 게이트: AD_EVERY판마다 + 쿨다운 충족 시 미드게임 광고 후 시작 (플레이 제한 없음)
+  function requestStart(mode){
+    if(AD_BLOCK)return;
+    if(CG.canMidgame()){
+      CG.requestAd('midgame',()=>startGame(mode)); // 성공/실패 무관 항상 시작
+    }else{
+      startGame(mode);
+    }
   }
   // 온보딩: 위로 스와이프 성공 → 게임 시작, 다른 방향 → 콕 집어 다시 안내
   function tutorialSwipe(dir){
@@ -1221,6 +1387,8 @@
   }
   function endGame(){
     state.running=false;
+    CG.gameplayStop();
+    CG.gamesSinceAd++; // 완주한 판 수 (미드게임 광고 주기용)
     const avg=state.rtN?state.rtSum/state.rtN:0;
     const avgTxt=state.rtN?avg.toFixed(2):'-';
     const fastTxt=state.fastest<Infinity?state.fastest.toFixed(2):'-';
@@ -1254,6 +1422,7 @@
       if(isBest)Platform.save(key,{best:state.score,avgRt:avg});
       $('bestLine').textContent=isBest&&state.score>0
         ?t('bestNewDaily'):tf('bestDaily',{b:rec?rec.best:0});
+      if(isBest&&state.score>0)CG.happytime(); // 신기록 축하 (sparingly)
     }else{
       const isBest=state.score>state.best;
       state.best=Math.max(state.best,state.score);
@@ -1318,9 +1487,17 @@
   applyLang();
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshTaunt();});
 
-  $('dailyBtn').addEventListener('click',()=>startGame('daily'));
-  $('freeBtn').addEventListener('click',()=>startGame('free'));
-  $('retryBtn').addEventListener('click',()=>startGame(state.mode));
+  $('dailyBtn').addEventListener('click',()=>requestStart('daily'));
+  $('freeBtn').addEventListener('click',()=>requestStart('free'));
+  $('retryBtn').addEventListener('click',()=>requestStart(state.mode));
+  $('revYes').addEventListener('click',()=>{
+    if(AD_BLOCK)return;
+    CG.requestAd('rewarded',ok=>{
+      if(ok)doRevive();
+      else{closeRevive();endGame();} // 광고 실패/미시청 → 그대로 종료
+    });
+  });
+  $('revNo').addEventListener('click',()=>{closeRevive();endGame();});
 
   // ---------- 성적표 이미지 (공유용 PNG를 캔버스로 렌더) ----------
   function rrect(x,X,Y,W,H,r){
@@ -1427,6 +1604,7 @@
     }
   });
 
+  CG.init(); // 비동기 — 실패해도 게임은 광고 없이 정상 동작
   requestAnimationFrame(loop);
 })();
 </script>
@@ -1454,6 +1632,9 @@ M4-2: 점수 또로롱 — 획득 "+N"이 판정 위치에서 점수 HUD로 날�
 M4-3: i18n(ko/en) — STR 사전+t()/tf(), 기기 언어 ko→한국어·그 외 영어, 저장 설정 최우선(Platform.save('lang')).
       영어 타이틀 "Opposite Day!", 지시어 JUMP!/DUCK!/LEFT!/RIGHT!, 판정·자막·온보딩·성적표·공유 텍스트·캔버스 이미지 전부 번역.
       시작 화면 ⚙️ 설정 시트(언어 토글, 추후 사운드 토글 자리). dir 기반이라 데일리 시퀀스는 언어 무관 동일.
+M4-4: CrazyGames SDK v3 연동 — 동적 로드(미탑재 환경은 광고 없이 완전 동작), 3판마다 미드게임 광고(+쿨다운 75s, CONFIG),
+      게임오버 리워드 부활(자유 연습 한정 판당 1회, 데일리 제외), 광고 중 음소거+입력 차단, gameplayStart/Stop·happytime,
+      ?mockads=1 가짜 광고 테스트. 출시 절차는 CRAZYGAMES.md 참조.
 -->
 </body>
 </html>
