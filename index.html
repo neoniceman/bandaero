@@ -758,7 +758,9 @@
 <script>
 (() => {
   // ---------- Audio ----------
-  let AC=null,MUTED=false; // MUTED: 광고 재생 중 등
+  // 음소거 소스 2개: 광고 재생 중 / CrazyGames 사이트 음소거 설정(SDK muteAudio)
+  let AC=null,MUTED=false,AD_MUTE=false,SDK_MUTE=false;
+  function syncMute(){MUTED=AD_MUTE||SDK_MUTE;}
   function audio(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC;}
   function tone(f,d=0.12,type='square',g=0.1,delay=0){
     if(MUTED)return;
@@ -867,7 +869,13 @@
         await window.CrazyGames.SDK.init();
         this.env=window.CrazyGames.SDK.environment; // 'crazygames'|'local'|'disabled'
         this.ready=this.env==='crazygames'||this.env==='local';
-        if(this.ready)window.CrazyGames.SDK.game.loadingStop();
+        if(this.ready){
+          window.CrazyGames.SDK.game.loadingStop();
+          // 사이트 음소거 설정(muteAudio) 반영 — 인게임 설정보다 우선
+          const applyMute=s=>{SDK_MUTE=!!(s&&s.muteAudio);syncMute();};
+          applyMute(window.CrazyGames.SDK.game.settings);
+          window.CrazyGames.SDK.game.addSettingsChangeListener(applyMute);
+        }
       }catch(e){this.ready=false;}
       console.log('[CG] env:',this.env,'ads:',this.ready);
     },
@@ -908,7 +916,7 @@
   // 광고 재생 중: 사운드 음소거 + 게임 입력 차단
   let AD_BLOCK=false;
   function adActive(on){
-    MUTED=on;
+    AD_MUTE=on;syncMute();
     AD_BLOCK=on;
   }
 
