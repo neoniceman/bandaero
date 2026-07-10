@@ -1007,6 +1007,19 @@
     if(p==='capacitor:'||p==='file:'||p==='ionic:')return WEB_URL;
     return location.origin+location.pathname;
   }
+  // 다운로드 버튼을 보여도 안전한가?
+  // 앱 WebView(CrazyGames 앱·인앱 브라우저)에서는 <a download>가 저장 대신 이미지를 전체화면으로 열어
+  // 게임으로 돌아갈 수 없게 만든다 → 데스크톱 브라우저에서만 노출.
+  function canDownload(){
+    try{
+      if(!('download' in document.createElement('a')))return false;
+      const ua=navigator.userAgent||'';
+      const isMobile=/Android|iPhone|iPad|iPod/i.test(ua);
+      if(isMobile)return false;               // 모바일은 앱/인앱 브라우저 구분이 불확실 → 숨김
+      if(window.self!==window.top)return false; // iframe(크레이지게임즈 웹) → 숨김
+      return true;
+    }catch(e){return false;}
+  }
 
   // ---------- 데일리 시드 (mulberry32) ----------
   function mulberry32(a){
@@ -1763,9 +1776,12 @@
       $('shareImg').src=shareObjUrl;
       $('shareDlBtn').href=shareObjUrl;
     }catch(e){$('shareImg').removeAttribute('src');}
+    // 앱 WebView에서는 다운로드가 이미지를 전체화면으로 열어버려 갇힘 → 버튼 자체를 숨김
+    $('shareDlBtn').style.display=canDownload()?'inline-block':'none';
     $('shareSheetTitle').textContent=t('shareTitle');
     $('shareHint').innerHTML=t('shareSaveHint');
-    $('shareHint2').textContent=t('shareSaveHint2');
+    // 저장이 불가한 환경(앱·모바일 웹뷰)에서는 "길게 눌러 저장" 안내를 띄우지 않음
+    $('shareHint2').textContent=canDownload()?t('shareSaveHint2'):'';
     $('shareCapBtn').textContent=t('shareCapBtn');
     $('shareDlBtn').textContent=t('shareDlBtn');
     $('shareCopyBtn').textContent=t('shareCopyBtn');
@@ -1869,6 +1885,9 @@ M5-4: 앱 WebView 대응 — CG 앱에선 길게 눌러 저장이 불가(WebView
       [📸 캡처 모드](UI 숨겨 성적표만 남김·아무 곳 탭하면 복귀) + [⬇️ 이미지 저장](<a download>, 브라우저용) 버튼 추가.
       OS 공유는 이미지→텍스트+URL→텍스트만 순으로 3단 재시도. 복사 실패 시 캡처 안내 토스트.
       ※ CG SDK엔 공유 API 없음. inviteLink는 멀티플레이어 전용이며 공유 버튼 용도 사용 시 리젝 위험(문서 명시)이라 미사용.
+M5-5: [핫픽스] 앱에서 "이미지 저장"을 누르면 <a download>가 저장 대신 이미지를 전체화면으로 열어 게임에 갇히는 문제.
+      canDownload() 판정(모바일 UA·iframe이면 false) 추가 → 데스크톱 브라우저에서만 저장 버튼/"길게 눌러 저장" 안내 노출.
+      앱·모바일에서는 캡처 모드만 남김.
 -->
 </body>
 </html>
