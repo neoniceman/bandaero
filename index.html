@@ -551,13 +551,42 @@
     width:100%;border-radius:12px;border:3px solid var(--ink);
     display:block;-webkit-touch-callout:default; /* 길게 눌러 저장 허용 */
   }
-  #shareHint{font-size:13px;font-weight:700;opacity:.75;line-height:1.6;text-align:center;}
+  #shareHint{font-size:14px;font-weight:800;opacity:.85;line-height:1.6;text-align:center;}
+  #shareHint b{color:var(--red);}
+  #shareHint2{font-size:11px;font-weight:600;opacity:.5;line-height:1.5;text-align:center;}
   #shareToast{
     font-size:13px;font-weight:800;color:var(--green);
     opacity:0;transition:opacity .2s;height:0;
   }
   #shareToast.on{opacity:1;height:auto;}
-  #shareOv .btnrow button{padding:12px 20px;font-size:14px;}
+  #shareOv .btnrow{margin-top:2px;}
+  #shareOv .btnrow button,#shareOv .btnrow a{padding:12px 18px;font-size:14px;}
+  /* 다운로드는 <a download> — 버튼과 같은 모양 */
+  #shareDlBtn{
+    display:inline-block;margin:0;border:3px solid var(--ink);
+    border-radius:999px;background:transparent;color:var(--ink);
+    font-weight:900;letter-spacing:.04em;text-decoration:none;
+    box-shadow:5px 5px 0 rgba(32,35,45,.15);cursor:pointer;
+  }
+  #shareDlBtn:active{transform:translate(3px,3px);box-shadow:2px 2px 0 rgba(32,35,45,.15);}
+  /* 캡처 모드: 성적표 이미지만 남기고 나머지 숨김 */
+  #shareOv.capture{background:rgba(32,35,45,.92);}
+  #shareOv.capture #shareSheet{
+    background:transparent;border:none;box-shadow:none;padding:0;max-width:92vw;
+  }
+  #shareOv.capture #shareSheetTitle,
+  #shareOv.capture #shareHint,
+  #shareOv.capture #shareHint2,
+  #shareOv.capture #shareToast,
+  #shareOv.capture .btnrow{display:none;}
+  #shareOv.capture #shareImg{border-width:0;border-radius:14px;}
+  #capHint{
+    position:fixed;left:50%;bottom:8%;transform:translateX(-50%);
+    display:none;color:#fff;font-size:13px;font-weight:800;
+    background:rgba(0,0,0,.5);padding:8px 16px;border-radius:999px;
+    text-align:center;white-space:nowrap;
+  }
+  #shareOv.capture #capHint{display:block;}
 
   /* 리워드 부활 시트 */
   #reviveOv{z-index:12;background:rgba(32,35,45,.55);}
@@ -763,12 +792,19 @@
     <div id="shareSheetTitle">내 성적표 자랑하기</div>
     <img id="shareImg" alt="report card">
     <div id="shareHint"></div>
+    <div id="shareHint2"></div>
     <div id="shareToast"></div>
     <div class="btnrow">
-      <button id="shareCopyBtn">텍스트 복사</button>
+      <button id="shareCapBtn">📸 캡처 모드</button>
+      <a id="shareDlBtn" download="opposite-day-report.png">⬇️ 이미지 저장</a>
+    </div>
+    <div class="btnrow">
+      <button id="shareCopyBtn" class="ghost">텍스트 복사</button>
       <button id="shareCloseBtn" class="ghost">닫기</button>
     </div>
   </div>
+  <!-- 캡처 모드: 성적표만 남기고 UI 숨김 (앱 WebView에서는 스크린샷이 유일한 저장 수단) -->
+  <div id="capHint"></div>
 </div>
 
 <div class="overlay hidden" id="reviveOv">
@@ -1030,8 +1066,13 @@
       reviveNo:'그만하기',
       rotate:'세로로 돌려주세요!',
       shareTitle:'내 성적표 자랑하기',
-      shareSaveHint:'이미지를 길게 눌러 저장하거나<br>화면을 캡처해서 자랑하세요!',
+      shareSaveHint:'📸 <b>화면을 캡처</b>해서 자랑하세요!',
+      shareSaveHint2:'(브라우저에서는 이미지를 길게 눌러 저장할 수도 있어요)',
+      shareCapHint:'지금 화면을 캡처하세요! 아무 곳이나 누르면 돌아갑니다',
       shareCopyOk:'📋 성적표 텍스트도 복사했어요',
+      shareCopyFail:'복사가 막혀 있어요. 화면을 캡처해 주세요',
+      shareCapBtn:'📸 캡처 모드',
+      shareDlBtn:'⬇️ 이미지 저장',
       shareCopyBtn:'텍스트 복사',
       shareClose:'닫기',
       // 도발 문구 — 등급별(0=초인 … 4=나무늘보). 공유 텍스트·이미지 하단에 삽입
@@ -1089,8 +1130,13 @@
       reviveNo:'No thanks',
       rotate:'Please rotate your device!',
       shareTitle:'Brag about your score',
-      shareSaveHint:'Long-press the image to save it,<br>or take a screenshot and share!',
+      shareSaveHint:'📸 Take a <b>screenshot</b> and share it!',
+      shareSaveHint2:'(In a browser you can also long-press the image to save)',
+      shareCapHint:'Screenshot now! Tap anywhere to go back',
       shareCopyOk:'📋 Text copied too',
+      shareCopyFail:'Copy is blocked here. Please screenshot',
+      shareCapBtn:'📸 Capture mode',
+      shareDlBtn:'⬇️ Save image',
       shareCopyBtn:'Copy text',
       shareClose:'Close',
       // 도발 문구 — 등급별(0=Superhuman … 4=Sloth)
@@ -1706,7 +1752,8 @@
     }catch(e){}
     return false;
   }
-  // 폴백 공유 시트: 성적표 이미지를 화면에 띄우고 저장/캡처 유도 (prompt 사용 안 함)
+  // 폴백 공유 시트: 성적표 이미지를 화면에 띄우고 캡처/저장 유도 (prompt 사용 안 함)
+  // 앱 WebView에서는 길게 눌러 저장·다운로드가 모두 막히므로 스크린샷이 유일한 수단 → 캡처 모드 제공
   let shareObjUrl=null;
   async function openShareSheet(txt){
     try{
@@ -1714,13 +1761,18 @@
       if(shareObjUrl)URL.revokeObjectURL(shareObjUrl);
       shareObjUrl=URL.createObjectURL(blob);
       $('shareImg').src=shareObjUrl;
+      $('shareDlBtn').href=shareObjUrl;
     }catch(e){$('shareImg').removeAttribute('src');}
     $('shareSheetTitle').textContent=t('shareTitle');
     $('shareHint').innerHTML=t('shareSaveHint');
+    $('shareHint2').textContent=t('shareSaveHint2');
+    $('shareCapBtn').textContent=t('shareCapBtn');
+    $('shareDlBtn').textContent=t('shareDlBtn');
     $('shareCopyBtn').textContent=t('shareCopyBtn');
     $('shareCloseBtn').textContent=t('shareClose');
+    $('capHint').textContent=t('shareCapHint');
     $('shareToast').classList.remove('on');
-    $('shareOv').classList.remove('hidden');
+    $('shareOv').classList.remove('capture','hidden');
     // 텍스트 복사도 곁들여 시도 (성공하면 안내 표시)
     if(await copyText(txt)){
       $('shareToast').textContent=t('shareCopyOk');
@@ -1729,12 +1781,21 @@
   }
   function closeShareSheet(){
     $('shareOv').classList.add('hidden');
+    $('shareOv').classList.remove('capture');
     if(shareObjUrl){URL.revokeObjectURL(shareObjUrl);shareObjUrl=null;}
   }
   $('shareCloseBtn').addEventListener('click',closeShareSheet);
+  // 캡처 모드: UI를 숨겨 스크린샷에 성적표만 담기게. 아무 곳이나 누르면 복귀
+  $('shareCapBtn').addEventListener('click',e=>{
+    e.stopPropagation();
+    $('shareOv').classList.add('capture');
+  });
+  $('shareOv').addEventListener('click',()=>{
+    if($('shareOv').classList.contains('capture'))$('shareOv').classList.remove('capture');
+  });
   $('shareCopyBtn').addEventListener('click',async()=>{
     const ok=await copyText(state.shareText||'');
-    $('shareToast').textContent=ok?t('shareCopyOk'):t('shareSaveHint').replace(/<br>/g,' ');
+    $('shareToast').textContent=ok?t('shareCopyOk'):t('shareCopyFail');
     $('shareToast').classList.add('on');
   });
 
@@ -1752,11 +1813,14 @@
           return;
         }
       }catch(e){if(e&&e.name==='AbortError')return;} // 시트 닫음 → 종료
-      // 2순위: 텍스트+URL OS 공유
+      // 2순위: 텍스트+URL OS 공유 (이미지 첨부만 거부된 환경)
       try{await navigator.share({title:t('title'),text:txt,url});return;}
       catch(e){if(e&&e.name==='AbortError')return;}
+      // 3순위: url 필드 없이 텍스트만 (일부 WebView가 url 동반 공유를 거부)
+      try{await navigator.share({text:txt+'\n'+url});return;}
+      catch(e){if(e&&e.name==='AbortError')return;}
     }
-    // 3순위: OS 공유 불가(iframe 등) → 성적표 이미지를 화면에 표시
+    // 4순위: OS 공유 불가(iframe·WebView) → 성적표 이미지를 화면에 표시 + 캡처 유도
     openShareSheet(txt+'\n'+url);
   });
 
@@ -1801,6 +1865,10 @@ M5-2: 공유 UX 수정 — ①공유 URL을 환경별로 결정(CrazyGames ifram
       (길게 눌러 저장/캡처 안내 + 텍스트 복사 곁들임). OS 공유 가능 환경은 기존 이미지 첨부 공유 그대로.
 M5-3: 도발 공유 — 칭호 등급별 도발 문구(초인 "이거 이기는 사람 있으면 나와봐" ~ 나무늘보 "내가 못한 거다"),
       황금 카드 낚임 시 전용 문구. 공유 텍스트 마지막 줄 + 성적표 이미지 하단에 렌더(폭 초과 시 자동 축소). ko/en.
+M5-4: 앱 WebView 대응 — CG 앱에선 길게 눌러 저장이 불가(WebView 컨텍스트 메뉴 없음). 안내를 "화면 캡처" 우선으로 바꾸고
+      [📸 캡처 모드](UI 숨겨 성적표만 남김·아무 곳 탭하면 복귀) + [⬇️ 이미지 저장](<a download>, 브라우저용) 버튼 추가.
+      OS 공유는 이미지→텍스트+URL→텍스트만 순으로 3단 재시도. 복사 실패 시 캡처 안내 토스트.
+      ※ CG SDK엔 공유 API 없음. inviteLink는 멀티플레이어 전용이며 공유 버튼 용도 사용 시 리젝 위험(문서 명시)이라 미사용.
 -->
 </body>
 </html>
