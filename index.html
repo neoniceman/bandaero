@@ -537,6 +537,28 @@
   @keyframes rotph{0%,15%{transform:rotate(0);}55%,100%{transform:rotate(90deg);}}
   #rotateTxt{color:#fff;font-size:18px;font-weight:900;letter-spacing:.04em;}
 
+  /* 공유 시트 (OS 공유가 막힌 환경 폴백: 성적표 이미지 표시) */
+  #shareOv{z-index:14;background:rgba(32,35,45,.72);}
+  #shareSheet{
+    width:100%;max-width:340px;max-height:92vh;overflow-y:auto;
+    background:#fff;border:4px solid var(--ink);border-radius:18px;
+    padding:18px 18px 14px;
+    box-shadow:8px 10px 0 rgba(32,35,45,.25);
+    display:flex;flex-direction:column;gap:10px;align-items:center;
+  }
+  #shareSheetTitle{font-size:19px;font-weight:900;transform:rotate(-1deg);}
+  #shareImg{
+    width:100%;border-radius:12px;border:3px solid var(--ink);
+    display:block;-webkit-touch-callout:default; /* 길게 눌러 저장 허용 */
+  }
+  #shareHint{font-size:13px;font-weight:700;opacity:.75;line-height:1.6;text-align:center;}
+  #shareToast{
+    font-size:13px;font-weight:800;color:var(--green);
+    opacity:0;transition:opacity .2s;height:0;
+  }
+  #shareToast.on{opacity:1;height:auto;}
+  #shareOv .btnrow button{padding:12px 20px;font-size:14px;}
+
   /* 리워드 부활 시트 */
   #reviveOv{z-index:12;background:rgba(32,35,45,.55);}
   #revSheet{
@@ -736,6 +758,19 @@
 
 <div id="rotateOv"><div class="phone"></div><div id="rotateTxt">세로로 돌려주세요!</div></div>
 
+<div class="overlay hidden" id="shareOv">
+  <div id="shareSheet">
+    <div id="shareSheetTitle">내 성적표 자랑하기</div>
+    <img id="shareImg" alt="report card">
+    <div id="shareHint"></div>
+    <div id="shareToast"></div>
+    <div class="btnrow">
+      <button id="shareCopyBtn">텍스트 복사</button>
+      <button id="shareCloseBtn" class="ghost">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="reviveOv">
   <div id="revSheet">
     <div class="revHeart">❤</div>
@@ -857,6 +892,9 @@
   // SDK가 없는 환경(GitHub Pages·앱인토스 등)에서는 광고 없이 완전 동작.
   // ?mockads=1: 로컬 테스트용 가짜 광고.
   const MOCK_ADS=QS.get('mockads')==='1';
+  // 공유용 정식 주소 (iframe 안에서는 location이 게임 페이지가 아니므로 고정값 사용)
+  const CG_GAME_URL='https://www.crazygames.com/game/opposite-day-pru';
+  const WEB_URL='https://neoniceman.github.io/bandaero/';
   const CG={
     ready:false,env:'none',
     gamesSinceAd:0,lastAdAt:-Infinity,
@@ -925,6 +963,14 @@
     AD_MUTE=on;syncMute();
     AD_BLOCK=on;
   }
+  // 공유할 주소: CrazyGames면 게임 페이지, 앱(capacitor)/파일이면 웹 주소, 그 외엔 현재 주소
+  // (SDK init 전에 눌릴 수 있어 호스트명으로도 판정)
+  function shareUrl(){
+    if(CG.env==='crazygames'||/crazygames\.com$/.test(location.hostname))return CG_GAME_URL;
+    const p=location.protocol;
+    if(p==='capacitor:'||p==='file:'||p==='ionic:')return WEB_URL;
+    return location.origin+location.pathname;
+  }
 
   // ---------- 데일리 시드 (mulberry32) ----------
   function mulberry32(a){
@@ -983,6 +1029,11 @@
       reviveYes:'광고 보고 부활!',
       reviveNo:'그만하기',
       rotate:'세로로 돌려주세요!',
+      shareTitle:'내 성적표 자랑하기',
+      shareSaveHint:'이미지를 길게 눌러 저장하거나<br>화면을 캡처해서 자랑하세요!',
+      shareCopyOk:'📋 성적표 텍스트도 복사했어요',
+      shareCopyBtn:'텍스트 복사',
+      shareClose:'닫기',
     },
     en:{
       title:'Opposite Day!',
@@ -1028,6 +1079,11 @@
       reviveYes:'Revive with an ad!',
       reviveNo:'No thanks',
       rotate:'Please rotate your device!',
+      shareTitle:'Brag about your score',
+      shareSaveHint:'Long-press the image to save it,<br>or take a screenshot and share!',
+      shareCopyOk:'📋 Text copied too',
+      shareCopyBtn:'Copy text',
+      shareClose:'Close',
     },
   };
   // 저장된 설정 > 기기 언어(ko면 한국어) > 영어
@@ -1605,17 +1661,58 @@
       x.restore();
       // 푸터: 게임 주소
       x.font='700 24px '+FONT;x.fillStyle='rgba(32,35,45,.55)';x.textAlign='center';
-      x.fillText('🐸 '+location.host+location.pathname,cx,H-84);
+      x.fillText('🐸 '+shareUrl().replace(/^https?:\/\//,'').replace(/\/$/,''),cx,H-84);
       c.toBlob(b=>b?res(b):rej(new Error('toBlob 실패')),'image/png');
     });
   }
 
+  // 클립보드 복사 시도 (성공 여부 반환) — iframe 등에서 실패해도 조용히 넘어감
+  async function copyText(txt){
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(txt);return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  // 폴백 공유 시트: 성적표 이미지를 화면에 띄우고 저장/캡처 유도 (prompt 사용 안 함)
+  let shareObjUrl=null;
+  async function openShareSheet(txt){
+    try{
+      const blob=await drawReportCard();
+      if(shareObjUrl)URL.revokeObjectURL(shareObjUrl);
+      shareObjUrl=URL.createObjectURL(blob);
+      $('shareImg').src=shareObjUrl;
+    }catch(e){$('shareImg').removeAttribute('src');}
+    $('shareSheetTitle').textContent=t('shareTitle');
+    $('shareHint').innerHTML=t('shareSaveHint');
+    $('shareCopyBtn').textContent=t('shareCopyBtn');
+    $('shareCloseBtn').textContent=t('shareClose');
+    $('shareToast').classList.remove('on');
+    $('shareOv').classList.remove('hidden');
+    // 텍스트 복사도 곁들여 시도 (성공하면 안내 표시)
+    if(await copyText(txt)){
+      $('shareToast').textContent=t('shareCopyOk');
+      $('shareToast').classList.add('on');
+    }
+  }
+  function closeShareSheet(){
+    $('shareOv').classList.add('hidden');
+    if(shareObjUrl){URL.revokeObjectURL(shareObjUrl);shareObjUrl=null;}
+  }
+  $('shareCloseBtn').addEventListener('click',closeShareSheet);
+  $('shareCopyBtn').addEventListener('click',async()=>{
+    const ok=await copyText(state.shareText||'');
+    $('shareToast').textContent=ok?t('shareCopyOk'):t('shareSaveHint').replace(/<br>/g,' ');
+    $('shareToast').classList.add('on');
+  });
+
   $('copyBtn').addEventListener('click',async()=>{
     const txt=state.shareText||'';
-    const url=location.origin+location.pathname;
+    const url=shareUrl(); // CrazyGames면 게임 페이지, 앱이면 웹 주소
     Platform.share({text:txt});
     if(navigator.share){
-      // 1순위: 성적표 이미지 첨부 공유 (Web Share Level 2)
+      // 1순위: 성적표 이미지 첨부 OS 공유 (Web Share Level 2)
       try{
         const blob=await drawReportCard();
         const file=new File([blob],'bandaero-report.png',{type:'image/png'});
@@ -1624,21 +1721,12 @@
           return;
         }
       }catch(e){if(e&&e.name==='AbortError')return;} // 시트 닫음 → 종료
-      // 2순위: 텍스트+URL 공유 (이미지 미지원 대상)
+      // 2순위: 텍스트+URL OS 공유
       try{await navigator.share({title:t('title'),text:txt,url});return;}
       catch(e){if(e&&e.name==='AbortError')return;}
     }
-    // 3순위: 클립보드 → prompt
-    const done=()=>{
-      $('copyBtn').textContent=t('copied');
-      setTimeout(()=>{$('copyBtn').textContent=t('btnShare');},1200);
-    };
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(txt).then(done)
-        .catch(()=>prompt(t('copyPrompt'),txt));
-    }else{
-      prompt(t('copyPrompt'),txt);
-    }
+    // 3순위: OS 공유 불가(iframe 등) → 성적표 이미지를 화면에 표시
+    openShareSheet(txt+'\n'+url);
   });
 
   CG.init(); // 비동기 — 실패해도 게임은 광고 없이 정상 동작
@@ -1677,6 +1765,9 @@ M4-5: 모바일 세로 전용 대응 — 모바일 가로 회전 시(landscape+�
 M5-1: 앱(Capacitor 6) — app/에 iOS·Android 프로젝트, 세로 네이티브 고정, 아이콘/스플래시 자동 생성,
       노치·홈인디케이터 세이프에어리어(HUD·타이머바·설정 버튼). 단일 소스 유지: sync-all.sh로
       dist/CG zip/app 번들 원커맨드 동기화 (DEPLOY.md 참조). 시뮬레이터·APK 빌드 검증 완료.
+M5-2: 공유 UX 수정 — ①공유 URL을 환경별로 결정(CrazyGames iframe→게임 페이지, 앱→웹 주소; 캔버스 푸터도 동일)
+      ②OS 공유 불가 시 prompt(한 줄만 보이고 키보드 뜸) 제거 → 성적표 이미지를 띄우는 게임 내 공유 시트로 교체
+      (길게 눌러 저장/캡처 안내 + 텍스트 복사 곁들임). OS 공유 가능 환경은 기존 이미지 첨부 공유 그대로.
 -->
 </body>
 </html>
