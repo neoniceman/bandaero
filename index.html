@@ -1001,10 +1001,18 @@
   }
   // 공유할 주소: CrazyGames면 게임 페이지, 앱(capacitor)/파일이면 웹 주소, 그 외엔 현재 주소
   // (SDK init 전에 눌릴 수 있어 호스트명으로도 판정)
+  // 네이티브 앱(Capacitor/Cordova WebView) 여부 — 프로토콜·호스트·전역객체 다중 판정
+  // (iOS WKWebView는 capacitor://localhost, Android는 https://localhost 등 환경마다 달라 하나만으론 부족)
+  function isNativeApp(){
+    const p=location.protocol,h=location.hostname;
+    if(p==='capacitor:'||p==='ionic:'||p==='file:')return true;
+    if(h==='localhost'||h==='127.0.0.1')return true; // 앱 번들은 localhost로 서빙됨
+    if(window.Capacitor||window.cordova)return true;
+    return false;
+  }
   function shareUrl(){
     if(CG.env==='crazygames'||/crazygames\.com$/.test(location.hostname))return CG_GAME_URL;
-    const p=location.protocol;
-    if(p==='capacitor:'||p==='file:'||p==='ionic:')return WEB_URL;
+    if(isNativeApp())return WEB_URL; // 앱: 로컬 경로 대신 웹 주소 (스토어 출시 후엔 스토어 링크로 교체)
     return location.origin+location.pathname;
   }
   // 다운로드 버튼을 보여도 안전한가?
@@ -1888,6 +1896,9 @@ M5-4: 앱 WebView 대응 — CG 앱에선 길게 눌러 저장이 불가(WebView
 M5-5: [핫픽스] 앱에서 "이미지 저장"을 누르면 <a download>가 저장 대신 이미지를 전체화면으로 열어 게임에 갇히는 문제.
       canDownload() 판정(모바일 UA·iframe이면 false) 추가 → 데스크톱 브라우저에서만 저장 버튼/"길게 눌러 저장" 안내 노출.
       앱·모바일에서는 캡처 모드만 남김.
+M5-6: [핫픽스] 아이폰 앱 공유 시 링크가 capacitor://localhost/로 나가 깨지던 문제.
+      isNativeApp() 판정을 protocol만이 아니라 hostname(localhost/127.0.0.1)·window.Capacitor로 다중화 →
+      앱에서는 웹 주소(WEB_URL)로 공유. 성적표 이미지 푸터도 동일 적용. (스토어 출시 후엔 스토어 링크로 교체 예정)
 -->
 </body>
 </html>
