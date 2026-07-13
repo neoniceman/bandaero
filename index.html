@@ -600,6 +600,8 @@
   @media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
     #rotateOv{display:flex;}
   }
+  /* 이중 안전장치: 데스크톱(마우스+키보드, html.kbd)에서는 회전 안내를 무조건 차단 */
+  html.kbd #rotateOv{display:none!important;}
   #rotateOv .phone{
     width:66px;height:38px;border:4px solid #fff;border-radius:9px;
     animation:rotph 1.6s ease-in-out infinite;
@@ -1027,6 +1029,8 @@
   const MOCK_ADS=!NO_ADS&&QS.get('mockads')==='1';
   // PC(마우스+호버) 환경 감지 — 키보드 안내 문구·방향키 퀵스타트 노출 판단용. 모바일 UI는 불변.
   const HAS_KBD=matchMedia('(hover:hover) and (pointer:fine)').matches;
+  // 데스크톱이면 body.kbd — 세로 회전 안내를 확실히 차단(CSS 미디어쿼리 이중 안전장치).
+  if(HAS_KBD)try{document.documentElement.classList.add('kbd');}catch(e){}
   // 공유용 정식 주소 (iframe 안에서는 location이 게임 페이지가 아니므로 고정값 사용)
   const CG_GAME_URL='https://www.crazygames.com/game/opposite-day-pru';
   // 앱 공유 목적지 = 광고 없는 브랜드 도메인 (애플 정책 안전). 스토어 출시 후엔 App Store 링크로 교체.
@@ -2195,7 +2199,8 @@ M5-12: 개인 서버 랭킹 (웹 전용) — midnightai 랭킹 API 연동. RANK_
       성적표 "오늘 N등" 줄 + 오늘/전체 보드 시트. 모든 요청 비동기·타임아웃·에러 무해화(게임 흐름 무영향).
       CG 로그인명 override는 SDK토큰 전달 사양 미정이라 추후. 서버 CORS 허용목록에 github.io 추가 필요(별도).
 M5-13: 세로 회전 안내 오작동 수정 — CrazyGames 데스크톱(가로 짧은 iframe)에서 "세로로 돌려주세요"가 떠
-      게임이 막히던 문제. 회전 안내 미디어쿼리에 (pointer:coarse) 추가 → 터치 기기에서만 표시, 데스크톱 제외.
+      게임이 막히던 문제. ①미디어쿼리에 (pointer:coarse) 추가 → 터치 기기에서만. ②이중 안전장치:
+      HAS_KBD면 html.kbd 클래스 → CSS로 회전 안내 무조건 차단(미디어쿼리 뚫려도 데스크톱은 안전).
 -->
 </body>
 </html>
