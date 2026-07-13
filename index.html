@@ -1050,13 +1050,14 @@
   const WEB_URL='https://www.midnightai.net/play/opposite-day/';
 
   // ---------- 개인 서버 랭킹 (웹 전용) ----------
-  // RANK_ON: 네이티브 앱(IS_APP)에서는 완전 비활성 — 애플 방향 미정, "무수집" 심사 상태 유지.
-  //   웹(midnightai.net·github.io·CrazyGames)에서만 동작.
+  // RANK_ON: 웹·앱 모두 랭킹 활성 (익명 게스트 신원, 광고·추적 아님).
+  //   앱은 개인정보 수집 설문 갱신 + privacy.html 반영 + 재심사 필요(별도 진행).
+  //   서버 CORS 허용목록에 앱 origin(capacitor://localhost 등) 추가돼야 실제 저장됨.
   // 신원: midnightai 공통 게스트(localStorage 'midnightai_player_identity_v1'). 서버는 토큰 해시만 저장.
   //   CG 로그인명 override는 SDK 토큰 전달 방식이 사양에 없어 추후(현재 CG에서도 익명 게스트).
   // 모든 요청은 비동기 + AbortController 타임아웃 + try/catch로 무해화 → 게임 흐름을 절대 막지 않음.
   // 데일리 모드만 제출(공정 비교: 전원 동일 시드). 자유 연습은 집계 안 함.
-  const RANK_ON=!IS_APP;
+  const RANK_ON=true;
   const RANK={
     base:'https://www.midnightai.net', gameId:'opposite-day',
     idKey:'midnightai_player_identity_v1',
@@ -2270,6 +2271,9 @@ M5-16: 재배포 캐시 방지 + 빠른 종료 제출 타이밍 수정.
       ①head에 Cache-Control/Pragma/Expires no-cache meta — 재배포 시 브라우저가 index.html 재검증(단일 파일이라 전체 최신).
       ②start 요청 Promise 보관→종료 시 대기(빠른 종료 시 playToken 누락 방지). ③토큰 발급 후 서버 최소
       플레이시간(minPlayMs 3초) 미달이면 남은 시간 대기 후 제출 — 빠른 종료로 play_time 거부되던 문제 해결.
+M5-17: 랭킹을 앱에도 활성화(RANK_ON=true, 웹·앱 공통). 익명 게스트라 광고·추적 아님(ATT 불필요, 4+ 유지).
+      privacy.html을 랭킹 데이터 수집(익명 게스트ID·점수·플레이시간·IP해시) 반영으로 개정.
+      앱 실제 저장하려면: ①App Store 개인정보 수집 설문 갱신 ②서버 CORS에 앱 origin 추가 ③재심사(별도).
 -->
 </body>
 </html>
