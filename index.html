@@ -595,7 +595,9 @@
     position:fixed;inset:0;z-index:20;background:var(--ink);
     display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
   }
-  @media (orientation:landscape) and (max-height:500px){
+  /* 세로 회전 안내는 '터치 기기'(pointer:coarse)에서만 — 데스크톱·CrazyGames 데스크톱 미리보기는
+     가로 짧은 iframe이라도 회전 불가/불필요하므로 제외. 세로 레이아웃은 가로 창에서도 정상 동작. */
+  @media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
     #rotateOv{display:flex;}
   }
   #rotateOv .phone{
@@ -2192,6 +2194,8 @@ M5-12: 개인 서버 랭킹 (웹 전용) — midnightai 랭킹 API 연동. RANK_
       익명 게스트 신원(공통 localStorage), 일회용 playToken, 데일리 모드만 제출(공정 비교). 시작 화면 🏆랭킹 버튼 +
       성적표 "오늘 N등" 줄 + 오늘/전체 보드 시트. 모든 요청 비동기·타임아웃·에러 무해화(게임 흐름 무영향).
       CG 로그인명 override는 SDK토큰 전달 사양 미정이라 추후. 서버 CORS 허용목록에 github.io 추가 필요(별도).
+M5-13: 세로 회전 안내 오작동 수정 — CrazyGames 데스크톱(가로 짧은 iframe)에서 "세로로 돌려주세요"가 떠
+      게임이 막히던 문제. 회전 안내 미디어쿼리에 (pointer:coarse) 추가 → 터치 기기에서만 표시, 데스크톱 제외.
 -->
 </body>
 </html>
