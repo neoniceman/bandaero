@@ -1057,55 +1057,87 @@
     base:'https://www.midnightai.net', gameId:'opposite-day',
     idKey:'midnightai_player_identity_v1',
     ident:null, playToken:null, startMs:0, myRank:null,
+    dbg:QS.get('rankdebug')==='1', log:[],
+    // 화면 디버그(iPhone 콘솔 접근 어려움 대비): ?rankdebug=1이면 좌하단에 랭킹 단계별 결과 표시
+    _log(m){
+      this.log.push(m);
+      if(!this.dbg)return;
+      let d=document.getElementById('rankDbg');
+      if(!d){d=document.createElement('div');d.id='rankDbg';
+        d.style.cssText='position:fixed;left:4px;bottom:4px;z-index:99999;background:rgba(0,0,0,.82);color:#3f6;font:11px/1.4 monospace;padding:6px 8px;max-width:94vw;white-space:pre-wrap;border-radius:6px;pointer-events:none';
+        document.body.appendChild(d);}
+      d.textContent='[rank]\n'+this.log.slice(-9).join('\n');
+    },
+    // submissionId용 UUID — crypto.randomUUID 없거나(구형/비보안) 대비한 폴백
+    uuid(){
+      try{if(crypto&&crypto.randomUUID)return crypto.randomUUID();}catch(e){}
+      try{if(crypto&&crypto.getRandomValues){const b=crypto.getRandomValues(new Uint8Array(16));
+        b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;
+        const h=[...b].map(x=>x.toString(16).padStart(2,'0'));
+        return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;}}catch(e){}
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);});
+    },
     _id(){
       if(this.ident)return this.ident;
       try{const v=localStorage.getItem(this.idKey);if(v)this.ident=JSON.parse(v);}catch(e){}
       return this.ident;
     },
     async _json(url,opt,ms){
-      const ac=new AbortController();const to=setTimeout(()=>ac.abort(),ms||6000);
+      const ac=new AbortController();const to=setTimeout(()=>ac.abort(),ms||8000);
       try{const r=await fetch(url,{...opt,signal:ac.signal});return await r.json();}
       finally{clearTimeout(to);}
     },
     async ensureId(){
       if(!RANK_ON)return null;
-      if(this._id())return this.ident;
+      if(this._id()){this._log('id: cached '+this.ident.displayName);return this.ident;}
       try{
         const j=await this._json(`${this.base}/api/player/guest?gameId=${this.gameId}`,{method:'POST'});
-        if(j&&j.playerToken){this.ident=j;try{localStorage.setItem(this.idKey,JSON.stringify(j));}catch(e){}return j;}
-      }catch(e){}
+        if(j&&j.playerToken){this.ident=j;try{localStorage.setItem(this.idKey,JSON.stringify(j));}catch(e){this._log('id: localStorage 저장실패');}
+          this._log('id: 발급 '+j.displayName);return j;}
+        this._log('id: 응답이상 '+JSON.stringify(j).slice(0,60));
+      }catch(e){this._log('id: 예외 '+e);}
       return null;
     },
+    resetId(){this.ident=null;try{localStorage.removeItem(this.idKey);}catch(e){}},
     async start(){
       if(!RANK_ON)return;
       this.playToken=null;
-      try{
-        const id=await this.ensureId();if(!id)return;
-        const j=await this._json(`${this.base}/api/ranking?gameId=${this.gameId}`,{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({action:'start',gameId:this.gameId,playerToken:id.playerToken})});
-        if(j&&j.playToken){this.playToken=j.playToken;this.startMs=performance.now();}
-      }catch(e){}
+      // 신원 토큰이 무효(invalid_player_token)면 1회 재발급 후 재시도 — 자가 치유
+      for(let attempt=0;attempt<2;attempt++){
+        try{
+          const id=await this.ensureId();if(!id){this._log('start: 신원없음');return;}
+          const j=await this._json(`${this.base}/api/ranking?gameId=${this.gameId}`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'start',gameId:this.gameId,playerToken:id.playerToken})});
+          if(j&&j.playToken){this.playToken=j.playToken;this.startMs=performance.now();this._log('start: ok');return;}
+          if(j&&j.error==='invalid_player_token'&&attempt===0){this._log('start: 토큰무효 → 재발급 재시도');this.resetId();continue;}
+          this._log('start: 실패 '+JSON.stringify(j).slice(0,60));return;
+        }catch(e){this._log('start: 예외 '+e);return;}
+      }
     },
     async submit(score){
-      if(!RANK_ON||!this.playToken||!this.ident)return null;
+      if(!RANK_ON)return null;
+      if(!this.playToken){this._log('submit: playToken없음(start실패?)');return null;}
+      if(!this.ident){this._log('submit: 신원없음');return null;}
       const durationMs=Math.round(performance.now()-this.startMs);
       const pt=this.playToken;this.playToken=null; // 1회용 소진
       try{
         const j=await this._json(`${this.base}/api/ranking?gameId=${this.gameId}`,{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({action:'submit',gameId:this.gameId,playToken:pt,
-            playerToken:this.ident.playerToken,score,durationMs,submissionId:crypto.randomUUID()})});
-        if(j&&j.ok){this.myRank=j.rank;return j.rank;}
-      }catch(e){}
+            playerToken:this.ident.playerToken,score,durationMs,submissionId:this.uuid()})});
+        if(j&&j.ok){this.myRank=j.rank;this._log(`submit: ok rank=${j.rank} dur=${durationMs}ms${j.testMode?' TEST':''}`);return j.rank;}
+        this._log(`submit: 거부 ${j&&j.error?j.error:JSON.stringify(j).slice(0,60)} dur=${durationMs}ms`);
+      }catch(e){this._log('submit: 예외 '+e+' dur='+durationMs+'ms');}
       return null;
     },
     async board(scope,limit){
       if(!RANK_ON)return null;
       try{
         const j=await this._json(`${this.base}/api/ranking?gameId=${this.gameId}&scope=${scope||'daily'}&limit=${limit||20}`,{method:'GET'});
-        if(j&&j.entries)return j;
-      }catch(e){}
+        if(j&&j.entries){this._log(`board: ${j.entries.length}건${j.testMode?' TEST':''}`);return j;}
+        this._log('board: 실패 '+JSON.stringify(j).slice(0,60));
+      }catch(e){this._log('board: 예외 '+e);}
       return null;
     },
     myName(){return (this._id()||{}).displayName||'';},
@@ -2218,6 +2250,10 @@ M5-13: 세로 회전 안내 오작동 수정 — CrazyGames 데스크톱(가로 
 M5-14: 랭킹 UX 강화 — ①성적표 순위를 크게(26px 금색 배너 "오늘 N위!") pop 애니메이션으로 표시,
       통신 성공 시에만(실패/미저장 시 숨김). ②게임오버 화면에 "🏆 랭킹 보기" 버튼 추가 — 시작 화면으로
       안 돌아가도 랭킹 열람 가능(기존엔 시작 화면에만 버튼 있어 사각지대였음).
+M5-15: 랭킹 견고화 — 일부 기기(특히 iOS)에서 저장 안 되던 문제 대응. ①스테일/무효 신원 토큰
+      (invalid_player_token) 자가 치유: 신원 폐기 후 재발급→start 1회 재시도. ②submissionId UUID를
+      crypto.randomUUID 폴백(getRandomValues·Math.random) 처리 — 구형/비보안 컨텍스트 대비.
+      ③타임아웃 6→8초(느린 셀룰러). ④?rankdebug=1: 화면 좌하단에 랭킹 단계별 결과/에러 표시(iPhone 진단용).
 -->
 </body>
 </html>
