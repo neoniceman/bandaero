@@ -636,13 +636,9 @@
     position:fixed;inset:0;z-index:20;background:var(--ink);
     display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
   }
-  /* 세로 회전 안내는 '터치 기기'(pointer:coarse)에서만 — 데스크톱·CrazyGames 데스크톱 미리보기는
-     가로 짧은 iframe이라도 회전 불가/불필요하므로 제외. 세로 레이아웃은 가로 창에서도 정상 동작. */
-  @media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
-    #rotateOv{display:flex;}
-  }
-  /* 이중 안전장치: 데스크톱(마우스+키보드, html.kbd)에서는 회전 안내를 무조건 차단 */
-  html.kbd #rotateOv{display:none!important;}
+  /* 회전 안내 비활성 — 게임이 가로에서도 정상 플레이 가능함을 확인(카드·개구리·HUD 다 보이고 스와이프는 절대방향).
+     카톡 등 인앱 웹뷰가 CrazyGames를 가로로 강제할 때 이 안내가 화면을 막아 '플레이 안 됨' 되던 문제 제거.
+     #rotateOv는 남겨두되 절대 표시하지 않음(display:none 유지). */
   #rotateOv .phone{
     width:66px;height:38px;border:4px solid #fff;border-radius:9px;
     animation:rotph 1.6s ease-in-out infinite;
@@ -2342,6 +2338,9 @@ M5-16: 재배포 캐시 방지 + 빠른 종료 제출 타이밍 수정.
 M5-17: 랭킹을 앱에도 활성화(RANK_ON=true, 웹·앱 공통). 익명 게스트라 광고·추적 아님(ATT 불필요, 4+ 유지).
       privacy.html을 랭킹 데이터 수집(익명 게스트ID·점수·플레이시간·IP해시) 반영으로 개정.
       앱 실제 저장하려면: ①App Store 개인정보 수집 설문 갱신 ②서버 CORS에 앱 origin 추가 ③재심사(별도).
+M5-21: 세로 회전 안내 제거 — 카톡 등 인앱 웹뷰가 CrazyGames를 가로로 강제할 때 회전 안내가 화면을 막아
+      '플레이 안 됨' 되던 문제. 게임이 가로에서도 정상 플레이(카드·개구리·HUD·스와이프 모두 동작) 확인 →
+      회전 안내 트리거 media query 삭제. #rotateOv는 남기되 절대 미표시. 안드로이드 크롬/삼성/카톡 모두 정상.
 M5-20: 안드로이드 웹 '플레이 안 됨' 대응. ①overscroll-behavior:none — 당겨서 새로고침이 아래 스와이프
       먹는 문제 차단. ②삼성 갤럭시 엣지 제스처로 pointerup 대신 pointercancel이 와 스와이프 유실되던 것 →
       pointermove로 마지막 위치 추적 후 pointercancel에서도 판정(resolveSwipe). 핵심 판정 로직(델타·24px)은 그대로.
