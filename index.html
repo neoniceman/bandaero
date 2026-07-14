@@ -40,7 +40,7 @@
     --gold-d:#c67300;    /* gold 어두운 변형 */
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;overflow:hidden;background:var(--bg);}
+  html,body{height:100%;overflow:hidden;background:var(--bg);overscroll-behavior:none;}
   /* 콤보 구간별 무대 색 (노랑→주황→핑크→보라) */
   body{--stage-bg:var(--bg);}
   body[data-stage="1"]{--stage-bg:#ffb43b;}
@@ -447,6 +447,35 @@
   }
   #comboPop.break{color:var(--red);animation:cbreak .85s ease-in forwards;}
 
+  /* 시작 카운트다운 3·2·1·시작! (예능 자막 톤) */
+  #countOv{position:fixed;inset:0;z-index:14;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+  #countOv.hidden{display:none;} /* ID 특정성이 .hidden을 이기므로 명시적으로 숨김 */
+  #countNum{
+    font-size:min(170px,42vw);font-weight:900;color:var(--ink);letter-spacing:-5px;line-height:1;
+    text-shadow:7px 9px 0 rgba(32,35,45,.22);transform-origin:center;
+  }
+  @keyframes countPop{
+    0%{opacity:0;transform:scale(.2) rotate(-16deg);}
+    28%{opacity:1;transform:scale(1.22) rotate(7deg);}
+    48%{transform:scale(.96) rotate(-4deg);}
+    70%{opacity:1;transform:scale(1) rotate(0);}
+    100%{opacity:0;transform:scale(1.7) rotate(5deg);}
+  }
+  #countNum.pop{animation:countPop .68s ease-out forwards;}
+  @keyframes countGoAnim{
+    0%{opacity:0;transform:scale(.3) rotate(-12deg);}
+    35%{opacity:1;transform:scale(1.35) rotate(6deg);}
+    62%{transform:scale(1.02) rotate(-2deg);}
+    100%{opacity:1;transform:scale(1.14) rotate(0);}
+  }
+  #countNum.go{color:var(--green);font-size:min(130px,34vw);letter-spacing:-2px;
+    text-shadow:7px 9px 0 rgba(32,35,45,.24);animation:countGoAnim .5s cubic-bezier(.2,1.4,.4,1) forwards;}
+  /* 카운트다운 중엔 카드·제한시간 링 숨김 (첫 카드는 카운트 끝나고 등장) */
+  .preroll #card,.preroll #cmdTimer{opacity:0;}
+  @media (prefers-reduced-motion:reduce){
+    #countNum.pop,#countNum.go{animation:none;opacity:1;transform:none;}
+  }
+
   /* 스와이프 힌트 화살표 */
   #hint{
     position:fixed;left:50%;bottom:9%;transform:translateX(-50%);
@@ -783,6 +812,7 @@
 </div>
 <div id="combo"></div>
 <div id="comboPop"></div>
+<div id="countOv" class="hidden"><span id="countNum"></span></div>
 
 <div id="floor"></div>
 
@@ -980,6 +1010,7 @@
     CMD_TIME_START:2.0,   // 문제 제한시간 시작(초)
     CMD_TIME_DEC:0.045,   // 문제당 제한시간 감소(초)
     CMD_TIME_MIN:0.75,    // 제한시간 하한(초)
+    COUNT_BEAT:680,       // 시작 카운트다운(3·2·1) 비트 간격(ms)
     GOLD_UNLOCK:10,       // 이 문제 수를 넘긴 뒤부터 황금 카드 등장
     GOLD_CHANCE:0.3,      // 황금 카드 확률
     GOLD_MULT:1.5,        // 황금 카드 점수 배율
@@ -1022,9 +1053,11 @@
       return id;
     },
     getServerTime(){return Date.now();}, // mock: 로컬 시간 (실연동 시 토스 서버 시간)
-    submitScore(score){console.log('[Platform] submitScore',score);},
-    openLeaderboard(){console.log('[Platform] openLeaderboard');},
-    share(payload){console.log('[Platform] share',payload);},
+    // 토스 런타임이면 window.TossBridge(앱인토스 프레임워크 래퍼가 주입)로 라우팅, 아니면 no-op 로그.
+    // 브리지 계약: submitScore(문자열), openLeaderboard(), share(payload). 다른 채널엔 TossBridge 부재 → 무해.
+    submitScore(score){var b=window.TossBridge;if(b&&b.submitScore){try{b.submitScore(String(score));}catch(e){}return;}console.log('[Platform] submitScore',score);},
+    openLeaderboard(){var b=window.TossBridge;if(b&&b.openLeaderboard){try{b.openLeaderboard();}catch(e){}return true;}console.log('[Platform] openLeaderboard');return false;},
+    share(payload){var b=window.TossBridge;if(b&&b.share){try{b.share(payload);}catch(e){}return true;}console.log('[Platform] share',payload);return false;},
     haptic(type){console.log('[Platform] haptic',type);},
     save(key,val){try{localStorage.setItem('bandaero_'+key,JSON.stringify(val));}catch(e){}},
     load(key){try{const v=localStorage.getItem('bandaero_'+key);return v?JSON.parse(v):null;}catch(e){return null;}},
@@ -1038,6 +1071,8 @@
   // 네이티브 앱(Capacitor)에서는 CG SDK를 아예 로드하지 않는다 — 애플 심사에서 제3자 추적 SDK로
   // 잡히지 않게(외부 네트워크 요청 0). window.Capacitor/capacitor: 프로토콜로만 판정(로컬 mock 테스트 유지).
   const IS_APP=!!window.Capacitor||location.protocol==='capacitor:';
+  // 앱인토스 런타임 감지 — 프레임워크 래퍼가 window.TossBridge를 주입할 때만 true. 다른 채널엔 항상 false(무해).
+  const IS_TOSS=!!(window.TossBridge||window.__APPS_IN_TOSS__);
   const NO_ADS=IS_APP||QS.get('noads')==='1'||/midnightai\.net$/.test(location.hostname);
   const MOCK_ADS=!NO_ADS&&QS.get('mockads')==='1';
   // PC(마우스+호버) 환경 감지 — 키보드 안내 문구·방향키 퀵스타트 노출 판단용. 모바일 UI는 불변.
@@ -1057,7 +1092,9 @@
   //   CG 로그인명 override는 SDK 토큰 전달 방식이 사양에 없어 추후(현재 CG에서도 익명 게스트).
   // 모든 요청은 비동기 + AbortController 타임아웃 + try/catch로 무해화 → 게임 흐름을 절대 막지 않음.
   // 데일리 모드만 제출(공정 비교: 전원 동일 시드). 자유 연습은 집계 안 함.
-  const RANK_ON=true;
+  // 토스에선 midnightai 랭킹을 끄고 토스 네이티브 리더보드를 쓴다(이원화). 그 외 채널은 midnightai 랭킹.
+  const RANK_ON=!IS_TOSS;
+  const RANK_UI=RANK_ON||IS_TOSS; // 랭킹 버튼 노출 여부 (토스도 리더보드 버튼 필요)
   const RANK={
     base:'https://www.midnightai.net', gameId:'opposite-day',
     idKey:'midnightai_player_identity_v1',
@@ -1275,6 +1312,7 @@
       comboPop5:'🔥 {n}콤보! 달아오른다!',comboPop10:'🔥 {n}콤보! 미쳤다!!',
       comboPop15:'🔥 {n}콤보! 폭주 모드!!',comboPopMax:'🔥 {n}콤보! 인간 맞냐??',
       comboBreak:'💔 {n}콤보 끊김…',
+      countGo:'시작!',
       rankBtn:'🏆 랭킹',rankTitleDaily:'🏆 오늘의 랭킹',rankTitleAll:'🏆 전체 랭킹',
       rankTabDaily:'오늘',rankTabAll:'전체',rankClose:'닫기',
       rankSubmitting:'순위 집계 중…',rankMy:'🏆 오늘 {n}위!',rankViewBtn:'🏆 랭킹 보기',
@@ -1352,6 +1390,7 @@
       comboPop5:'🔥 {n} COMBO! Heating up!',comboPop10:'🔥 {n} COMBO! INSANE!!',
       comboPop15:'🔥 {n} COMBO! RAMPAGE!!',comboPopMax:'🔥 {n} COMBO! Are you human??',
       comboBreak:'💔 {n} combo lost…',
+      countGo:'GO!',
       rankBtn:'🏆 Ranking',rankTitleDaily:'🏆 Today\'s Ranking',rankTitleAll:'🏆 All-Time Ranking',
       rankTabDaily:'Today',rankTabAll:'All',rankClose:'Close',
       rankSubmitting:'Ranking your score…',rankMy:'🏆 #{n} today!',rankViewBtn:'🏆 View Ranking',
@@ -1736,20 +1775,26 @@
   }
 
   // ---------- Input: 스와이프 + 키보드 ----------
-  let sx=0,sy=0,swiping=false;
-  window.addEventListener('pointerdown',e=>{
-    if(e.target.tagName==='BUTTON')return;
-    sx=e.clientX;sy=e.clientY;swiping=true;
-  });
-  window.addEventListener('pointerup',e=>{
+  let sx=0,sy=0,lx=0,ly=0,swiping=false;
+  // 판정 로직(델타·24px 데드존·4방향)은 그대로. 종료 좌표만 인자로 받음.
+  function resolveSwipe(ex,ey){
     if(!swiping)return;swiping=false;
-    const dx=e.clientX-sx,dy=e.clientY-sy;
+    const dx=ex-sx,dy=ey-sy;
     if(Math.hypot(dx,dy)<CONFIG.SWIPE_DEADZONE)return; // 너무 짧으면 무시
     const dir=Math.abs(dx)>Math.abs(dy)
       ?(dx>0?'right':'left')
       :(dy>0?'down':'up');
     answer(dir);
+  }
+  window.addEventListener('pointerdown',e=>{
+    if(e.target.tagName==='BUTTON')return;
+    sx=lx=e.clientX;sy=ly=e.clientY;swiping=true;
   });
+  window.addEventListener('pointermove',e=>{if(swiping){lx=e.clientX;ly=e.clientY;}},{passive:true});
+  window.addEventListener('pointerup',e=>{resolveSwipe(e.clientX,e.clientY);});
+  // 삼성 갤럭시 엣지 제스처/뒤로가기 등으로 pointerup 대신 pointercancel이 오면 스와이프가 유실됨
+  // → 마지막 이동 위치로 판정해서 살림 (안드로이드 '플레이 안 됨' 대응)
+  window.addEventListener('pointercancel',()=>{resolveSwipe(lx,ly);});
   window.addEventListener('keydown',e=>{
     const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(map[e.code]){
@@ -1800,12 +1845,29 @@
     }
     beginRun();
   }
+  // 시작 카운트다운: 3·2·1·시작! 후 첫 카드. 진행 중엔 running=false라 게임시간·타이머 정지 → "시작하자마자 늦는" 문제 해소.
+  function countdown(done){
+    const ov=$('countOv'),el=$('countNum'),root=document.documentElement;
+    const seq=['3','2','1',t('countGo')];
+    audio();
+    root.classList.add('preroll'); ov.classList.remove('hidden');
+    let i=0;
+    (function step(){
+      if(i>=seq.length){ov.classList.add('hidden');el.className='';root.classList.remove('preroll');done();return;}
+      const go=(i===seq.length-1);
+      el.textContent=seq[i];
+      el.className='';void el.offsetWidth;el.classList.add(go?'go':'pop');
+      go?sfx.start():sfx.tick();
+      i++;
+      setTimeout(step,go?560:CONFIG.COUNT_BEAT);
+    })();
+  }
   function beginRun(){
-    state.running=true;
     state.runSeq++;
     CG.gameplayStart();
     if(state.mode==='daily')RANK.startPromise=RANK.start(); // 데일리만 랭킹 세션 시작 (종료 시 이 Promise를 기다림)
-    newCmd();
+    // 카운트다운 끝나야 running=true + 첫 카드 → 반응측정·제한시간이 '준비된 상태'에서 시작
+    countdown(()=>{ state.running=true; newCmd(); });
   }
   // 시작 게이트: AD_EVERY판마다 + 쿨다운 충족 시 미드게임 광고 후 시작 (플레이 제한 없음)
   function requestStart(mode){
@@ -1893,10 +1955,11 @@
       $('bestLine').textContent=isBest&&state.score>0
         ?t('champion'):tf('sessionBest',{b:state.best});
     }
-    Platform.submitScore(state.score);
-    // 개인 서버 랭킹: 데일리 모드 + 유효 점수만 제출 (비동기 — 응답 오면 성적표에 등수 표시)
+    // 리더보드 제출: 데일리 + 유효 점수만. 토스=네이티브 리더보드(Platform→TossBridge) / 그 외=midnightai RANK
     const repRank=$('repRank');
-    if(RANK_ON&&state.mode==='daily'&&state.score>0){
+    if(IS_TOSS&&state.mode==='daily'&&state.score>0){
+      Platform.submitScore(state.score);repRank.style.display='none'; // 토스는 자체 순위 UI라 성적표 등수줄 생략
+    }else if(RANK_ON&&state.mode==='daily'&&state.score>0){
       const rs=state.runSeq;
       repRank.textContent=t('rankSubmitting');repRank.style.display='';
       RANK.submit(state.score).then(rank=>{
@@ -1995,16 +2058,20 @@
         +`<span class="rkScore">${Number(e.score).toLocaleString()}</span></div>`;
     }).join('');
   }
-  if(RANK_ON){
+  if(RANK_UI){
     $('rankBtn').classList.remove('hidden');
     $('rankViewBtn').classList.remove('hidden'); // 게임오버 화면에서도 랭킹 열기 (시작 화면으로 안 돌아가므로)
-    $('rankBtn').addEventListener('click',()=>openBoard('daily'));
-    $('rankViewBtn').addEventListener('click',()=>openBoard('daily'));
-    $('rankClose').addEventListener('click',()=>$('rankOv').classList.add('hidden'));
-    $('rankTabs').addEventListener('click',e=>{const b=e.target.closest('[data-scope]');if(b)openBoard(b.dataset.scope);});
-    $('rankOv').addEventListener('click',e=>{if(e.target.id==='rankOv')$('rankOv').classList.add('hidden');});
-    $('repRank').addEventListener('click',()=>openBoard('daily'));
-    RANK.ensureId(); // 부팅 시 신원 미리 발급 (비동기)
+    // 리더보드 열기: 토스=네이티브 리더보드(Platform→TossBridge), 그 외=우리 midnightai 보드
+    const openLb=()=>{ if(IS_TOSS){Platform.openLeaderboard();return;} openBoard('daily'); };
+    $('rankBtn').addEventListener('click',openLb);
+    $('rankViewBtn').addEventListener('click',openLb);
+    $('repRank').addEventListener('click',openLb);
+    if(RANK_ON){ // midnightai 보드 UI/신원 — 토스에선 불필요
+      $('rankClose').addEventListener('click',()=>$('rankOv').classList.add('hidden'));
+      $('rankTabs').addEventListener('click',e=>{const b=e.target.closest('[data-scope]');if(b)openBoard(b.dataset.scope);});
+      $('rankOv').addEventListener('click',e=>{if(e.target.id==='rankOv')$('rankOv').classList.add('hidden');});
+      RANK.ensureId(); // 부팅 시 신원 미리 발급 (비동기)
+    }
   }
   $('langKo').addEventListener('click',()=>setLang('ko'));
   $('langEn').addEventListener('click',()=>setLang('en'));
@@ -2168,7 +2235,8 @@
   $('copyBtn').addEventListener('click',async()=>{
     const txt=state.shareText||'';
     const url=shareUrl(); // CrazyGames면 게임 페이지, 앱이면 웹 주소
-    Platform.share({text:txt});
+    // 토스: 토스 공유 SDK(getTossShareLink+share)로만 처리하고 종료 (OS 공유·캡처 시트 안 탐)
+    if(IS_TOSS){Platform.share({text:txt,url,score:state.report&&state.report.score});return;}
     if(navigator.share){
       // 1순위: 성적표 이미지 첨부 OS 공유 (Web Share Level 2)
       try{
@@ -2274,6 +2342,17 @@ M5-16: 재배포 캐시 방지 + 빠른 종료 제출 타이밍 수정.
 M5-17: 랭킹을 앱에도 활성화(RANK_ON=true, 웹·앱 공통). 익명 게스트라 광고·추적 아님(ATT 불필요, 4+ 유지).
       privacy.html을 랭킹 데이터 수집(익명 게스트ID·점수·플레이시간·IP해시) 반영으로 개정.
       앱 실제 저장하려면: ①App Store 개인정보 수집 설문 갱신 ②서버 CORS에 앱 origin 추가 ③재심사(별도).
+M5-20: 안드로이드 웹 '플레이 안 됨' 대응. ①overscroll-behavior:none — 당겨서 새로고침이 아래 스와이프
+      먹는 문제 차단. ②삼성 갤럭시 엣지 제스처로 pointerup 대신 pointercancel이 와 스와이프 유실되던 것 →
+      pointermove로 마지막 위치 추적 후 pointercancel에서도 판정(resolveSwipe). 핵심 판정 로직(델타·24px)은 그대로.
+M5-19: 시작 카운트다운 3·2·1·시작! — 피드백(시작하자마자 타이머 돌아 초반에 늦음) 반영. beginRun에서
+      countdown() 후 running=true+첫 카드. 진행 중 running=false라 60초·반응측정 정지 → '준비된 상태'에서 시작.
+      예능 자막 톤 팝 애니메이션(시작!은 초록), preroll로 카드·타이머 링 숨김, prefers-reduced-motion 대응.
+      CONFIG.COUNT_BEAT(680ms) 튜닝. #countOv.hidden 명시(ID 특정성 대응).
+M5-18: 토스(앱인토스) 리더보드 브리지 라우팅 — 채널 이원화. IS_TOSS(window.TossBridge 주입 감지)면
+      RANK_ON=false(midnightai 랭킹 끔)+토스 네이티브 리더보드 사용. Platform.submitScore/openLeaderboard가
+      TossBridge로 라우팅(계약: submitScore(str)/openLeaderboard()/share). endGame·랭킹버튼이 토스면 토스로,
+      아니면 기존 midnightai 보드로. 공유(자랑하기!)도 토스면 TossBridge.share만 호출하고 OS공유·캡처시트 안 탐. 전부 IS_TOSS 가드라 다른 채널엔 완전 무해(회귀 검증 완료). TOSS.md 참고.
 -->
 </body>
 </html>
